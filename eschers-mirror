@@ -2,40 +2,112 @@
 
 import sys
 sys.path += ['build/lib.linux-x86_64-2.6']
+import OpenGL
+#OpenGL.ERROR_CHECKING = False
+from OpenGL.GL import *
 import pygame
 from pygame.locals import *
-from OpenGL.GL import *
 import VideoDecode
 import os
 from threading import Condition
+from bidict import bidict
 
-class Frame:
-	pass
+class Tile:
+	def grabNotify(self):
+		"""Notfiy the tile that it has been grabbed"""
+		pass
+	
+	def rotate(self, dir):
+		"""
+		Rotate the tile to the next valid angle (determined by the
+		grid/tile type).  dir == 1 means ccw; dir == -1 means cw.  Has
+		no effect if the grid does not allow rotations.
+		"""
+		pass
 
-frame = Frame()
-frame.cond = Condition()
-frame.isNew = False
-frame.width = 0
-frame.height = 0
+class RightTriGrid:
+	def __init__(self, rows, cols):
+		self.rows = rows
+		self.cols = cols
+		self.tiles = bidict()
+		import itertools
+		for loc in itertools.product(range(rows), range(cols), range(2)):
+			self.tiles[loc] = RightTriTile(self, loc)
+		self.swapTiles((0, 0, 0), (0, 0, 1))
+		self.grabbedTile = None
+	
+	def draw(self, aspect):
+		for tile in self.tiles.itervalues():
+			# HACK
+			if isinstance(tile, Tile):
+				tile.draw(aspect)
+	
+	def swapTiles(self, loc1, loc2):
+		tile1 = self.tiles[loc1]
+		tile2 = self.tiles[loc2]
+		self.tiles[loc1] = tile2
+		self.tiles[loc2] = tile1
 
-def frameCb(format, width, height, aspect, data):
-	frame.cond.acquire()
-	frame.isNew = True
-	frame.sizeChanged = frame.width != width or frame.height != height
-	frame.width = width
-	frame.height = height
-	frame.data = data
-	frame.cond.notifyAll()
-	frame.cond.release()
+class RightTriTile(Tile):
+	def __init__(self, grid, srcLoc):
+		self.grid = grid
+		self.srcLoc = srcLoc
+	
+	def draw(self, aspect):
+		"""
+		Draw the tile.
+		aspect: aspect ratio of the video
+		"""
+		width = aspect/self.grid.cols
+		height = 1.0/self.grid.rows
+		srcX = (self.srcLoc[1]+0.5)*width
+		srcY = (self.srcLoc[0]+0.5)*height
+		if self == self.grid.grabbedTile:
+			dstX = self.grid.grabbedX
+			dstY = self.grid.grabbedY
+			dstOff = self.grid.grabbedOff
+			glEnable(GL_BLEND)
+			glColor4d(0, 0, 0, 0.8)
+		else:
+			row, col, dstOff = self.grid.tiles[self]
+			dstX = (col+0.5)*width
+			dstY = (row+0.5)*height
+		glPushMatrix()
+		glTranslated(dstX, dstY, 0.)
+		glRotated(180*dstOff, 0, 0, 1)
+		glMatrixMode(GL_TEXTURE)
+		glPushMatrix()
+		glTranslated(srcX, srcY, 0.)
+		glRotated(180*self.srcLoc[2], 0, 0, 1)
+		
+		glBegin(GL_TRIANGLES)
+		glTexCoord2d(-width/2., -height/2.)
+		glVertex2d(-width/2., -height/2.)
+		glTexCoord2d(width/2., -height/2.)
+		glVertex2d(width/2., -height/2.)
+		glTexCoord2d(-width/2., height/2.)
+		glVertex2d(-width/2., height/2.)
+		glEnd()
+		
+		glPopMatrix()
+		glMatrixMode(GL_MODELVIEW)
+		glPopMatrix()
+		if self == self.grid.grabbedTile:
+			glDisable(GL_BLEND)
+			glColor4d(0, 0, 0, 1)
+	
+	def rotate(self, direction):
+		row, col, off = tiles[self]
+		tiles[self] = row, col, (off+direction)%2
 
-def handleSizeChange():
+def handleSizeChange(width, height):
 	# Find the smallest power-of-2--sized square that can contain the frame
 	texSize = 1
-	while texSize < max(frame.width, frame.height):
+	while texSize < max(width, height):
 		texSize *= 2
 	# Set the active texture to a blank texSize*texSize square (the image
 	# will be filled in later).
-	texInitializer = '\0' * (3*frame.width*frame.height)
+	texInitializer = '\0' * (3*width*height)
 	glTexImage2D(
 		GL_TEXTURE_2D, 0, GL_RGB, texSize, texSize, 0,
 		GL_RGB, GL_UNSIGNED_BYTE, texInitializer)
@@ -43,13 +115,13 @@ def handleSizeChange():
 	# wide by 1.0 high.
 	glMatrixMode(GL_TEXTURE)
 	glLoadIdentity()
-	glTranslated(0.0, float(frame.height)/texSize, 0.0)
-	glScaled(float(frame.height)/texSize, -float(frame.height)/texSize, 1.0)
+	glTranslated(0.0, float(height)/texSize, 0.0)
+	glScaled(float(height)/texSize, -float(height)/texSize, 1.0)
 	# Set up the projection matrix so that the window is aspect wide by 1.0
 	# high, with the origin in the lower left.
 	glMatrixMode(GL_PROJECTION)
 	glLoadIdentity()
-	glOrtho(0.0, float(frame.width)/frame.height, 0.0, 1.0, -1.0, 1.0)
+	glOrtho(0.0, float(width)/height, 0.0, 1.0, -1.0, 1.0)
 	glMatrixMode(GL_MODELVIEW)
 	
 if __name__ == '__main__':
@@ -61,37 +133,29 @@ if __name__ == '__main__':
 	glClearColor(0.0, 0.0, 0.0, 1.0)
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
+	grid = RightTriGrid(2, 3)
 	VideoDecode.init(
 		os.path.join(os.path.expanduser('~'), '.xine', 'config'),
-		sys.argv[1], frameCb)
+		sys.argv[1])
 	VideoDecode.start()
 
+	oldWidth = 0
+	oldHeight = 0
 	while True:
-		frame.cond.acquire()
-		frame.cond.wait(0.05)
-		if frame.isNew:
-			if frame.sizeChanged:
-				handleSizeChange()
+		width, height, aspect, data = VideoDecode.getFrame(50)
+		if width != None:
+			if oldWidth != width or oldHeight != height:
+				handleSizeChange(width, height)
+				oldWidth = width
+				oldHeight = height
 			glRasterPos2i(0, 240)
 			glClear(GL_COLOR_BUFFER_BIT)
 			glTexSubImage2D(
-				GL_TEXTURE_2D, 0, 0, 0,
-				frame.width, frame.height,
-				GL_RGB, GL_UNSIGNED_BYTE, frame.data)
-			pixAspect = float(frame.width)/frame.height
-			glBegin(GL_QUADS)
-			glTexCoord2d(0.0, 0.0)
-			glVertex2d(0.0, 0.0)
-			glTexCoord2d(pixAspect, 0.0)
-			glVertex2d(pixAspect, 0.0)
-			glTexCoord2d(pixAspect, 1.0)
-			glVertex2d(pixAspect, 1.0)
-			glTexCoord2d(0.0, 1.0)
-			glVertex2d(0.0, 1.0)
-			glEnd()
+				GL_TEXTURE_2D, 0, 0, 0, width, height,
+				GL_RGB, GL_UNSIGNED_BYTE, data)
+			pixAspect = float(width)/height
+			grid.draw(pixAspect)
 			pygame.display.flip()
-			frame.isNew = False
-		frame.cond.release()
 		event = pygame.event.poll()
 		if event.type == QUIT:
 			break
