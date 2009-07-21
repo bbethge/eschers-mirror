@@ -1,51 +1,49 @@
 class bidict(dict):
 	"""
-	Bidirectional dictionary: a dictionary that ensures that (d[a] == b
-	iff d[b] == a) and (a not in d iff b not in d).  This is useful if you
-	want a two-way mapping and the domain and range are disjoint.
-	
-	I have only overridden enough methods to ensure the invariant holds.  In
-	particular, fromkeys returns a plain dict, which may or may not be what
-	you want if you actually want to use it.
+	Bidirectional dictionary: a mapping that maintains its own inverse
+	mapping in self.inv, which is another bidict.  The more complicated
+	mutating methods of dict are not implemented.
 	"""
 	
-	def __init__(self):
+	def __init__(self, inverse=None):
 		"""
 		Create an empty bidict.  For simplicity, bidict does not
 		support creation with initial contents.
 		"""
-		dict.__init__(self)
+		if inverse == None:
+			self.inv = bidict(self)
+		elif isinstance(inverse, bidict):
+			self.inv = inverse
+		else:
+			raise TypeError(
+					"bidict() expected bidict instance or "
+					"None")
+		
+	def __setitem__(self, key, val):
+		dict.__setitem__(self, key, val)
+		dict.__setitem__(self.inv, val, key)
 	
-	def __delitem__(self, item):
-		other = self[item]
-		dict.__delitem__(self, item)
-		dict.__delitem__(self, other)
+	def __delitem__(self, key):
+		dict.__delitem__(self[key])
+		dict.__delitem__(key)
 	
-	def __setitem__(self, item, other):
-		dict.__setitem__(self, item, other)
-		dict.__setitem__(self, other, item)
+	def clear(self):
+		dict.clear(self)
+		dict.clear(self.inv)
+	
+	def pop(self, default=None):
+		"Not implemented"
+		raise NotImplementedError
 	
 	def popitem(self):
-		result = dict.popitem(self)
-		dict.__delitem__(self, result[1])
+		key, val = dict.pop(self)
+		dict.__delitem__(self.inv, val)
+		return key, val
 	
-	def pop(self, item, *default):
-		if item in self:
-			result = self[item]
-			del self[item]
-		else:
-			if len(default) == 1:
-				result = default[0]
-			elif len(default) == 0:
-				raise KeyError
-			else:
-				raise TypeError
-		return result
-	
-	def setdefault(self, *args):
-		"""Not implemented"""
+	def setdefault(self, key, default=None):
+		"Not implemented"
 		raise NotImplementedError
 	
 	def update(self, other):
-		"""Not implemented"""
-		raise NotImplementedError
+		for key, val in other.iteritems():
+			self[key] = val
