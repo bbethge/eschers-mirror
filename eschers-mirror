@@ -12,11 +12,13 @@ import VideoDecode
 import os
 from bidict import bidict
 import numpy as np
+from math import *  # math is delicious
 
 windowSize = 640, 480
 videoSize = 1, 1
 videoOrigin = 0., 0.
 videoAspect = 1.
+videoTex = 0
 
 class Tile:
 	def grabNotify(self):
@@ -46,6 +48,11 @@ class RightTriGrid:
 			if tile is not self.grabbedTile:
 				tile.draw(aspect)
 		if self.grabbedTile is not None:
+			pos = getMousePos()
+			if 0. <= pos[0] < videoAspect and 0. <= pos[1] < 1.:
+				loc = self.findTile(pos)
+				if self.grabbedIdx == loc[2]:
+					self.tiles[loc].drawHighlight(aspect)
 			self.grabbedTile.draw(aspect)
 	
 	def swapTiles(self, loc1, loc2):
@@ -100,9 +107,76 @@ class RightTriGrid:
 			self.grabbedTile = None
 
 class RightTriTile(Tile):
+	verts = np.array(
+		[	[-0.5, -0.5],
+			[ 0.5, -0.5],
+			[-0.5,  0.5] ],
+		np.double)
+	hlWidth = 0.1
+	hlTex = 0
+	hlSideVerts = np.empty((len(verts)*4,2), np.double)
+	hlSideTexCoords = np.empty_like(hlSideVerts)
+	rotMat = np.matrix(
+		[	[ 0., -1.],
+			[ 1.,  0.] ],
+		np.double)
+	for i in range(len(verts)):
+		nextI = (i+1) % len(verts)
+		side = verts[nextI] - verts[i]
+		side *= hlWidth / np.hypot(*side)
+		offset = side*rotMat
+		hlSideVerts[4*i] = verts[i]
+		hlSideVerts[4*i+1] = verts[i] + offset
+		hlSideVerts[4*i+2] = verts[nextI] + offset
+		hlSideVerts[4*i+3] = verts[nextI]
+		hlSideTexCoords[4*i] = [0.5, 1.]
+		hlSideTexCoords[4*i+1] = [1.5, 1.]
+		hlSideTexCoords[4*i+2] = [1.5, 1.]
+		hlSideTexCoords[4*i+3] = [0.5, 1.]
+	hlCornerVerts = []
+	hlCornerTexCoords = []
+	for i in range(len(verts)):
+		nextI = (i+1) % len(verts)
+		prevI = (i-1) % len(verts)
+		side1 = verts[i] - verts[prevI]
+		np.divide(side1, np.hypot(*side1), side1)
+		side2 = verts[nextI] - verts[i]
+		np.divide(side2, np.hypot(*side2), side2)
+		perp1 = np.array(side1 * rotMat, np.double)
+		perp2 = np.array(side2 * rotMat, np.double)
+		angle = acos(np.sum(perp1*perp2))
+		slices = int(ceil(angle/(pi/16)))
+		fanVerts = np.empty((slices+2,2), np.double)
+		fanVerts[0] = verts[i]
+		offset = hlWidth*perp1
+		miniRotMat = np.matrix(
+			[	[ cos(angle/slices), sin(angle/slices)],
+				[-sin(angle/slices), cos(angle/slices)] ],
+			np.double)
+		for n in range(slices):
+			fanVerts[n+1] = verts[i] + offset
+			offset = offset * miniRotMat
+		fanVerts[slices+1] = verts[i] + hlWidth*perp2
+		hlCornerVerts += [fanVerts]
+		hlCornerTexCoords += [
+			np.array(
+				[[0.5, 1.]] + [[1.5, 1.]]*(slices+1),
+				np.double)
+			]
+	
 	def __init__(self, grid, srcLoc):
 		self.grid = grid
 		self.srcLoc = srcLoc
+		if RightTriTile.hlTex == 0:
+			RightTriTile.hlTex = glGenTextures(1)
+			glBindTexture(GL_TEXTURE_2D, RightTriTile.hlTex)
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+			texels = np.array(
+				[	[ [255, 255, 0, 255], [127, 255, 0,   0] ],
+					[ [255, 255, 0, 255], [127, 255, 0,   0] ] ],
+				np.uint8)
+			glTexImage2Dub(
+				GL_TEXTURE_2D, 0, GL_RGBA, 0, GL_RGBA, texels)
 	
 	def draw(self, aspect):
 		"""
@@ -127,21 +201,16 @@ class RightTriTile(Tile):
 		glPushMatrix()
 		glTranslated(dstX, dstY, 0.)
 		glRotated(180*dstIdx, 0, 0, 1)
+		glScaled(width, height, 1.)
 		glMatrixMode(GL_TEXTURE)
 		glPushMatrix()
 		glTranslated(srcX, srcY, 0.)
 		glRotated(180*self.srcLoc[2], 0, 0, 1)
+		glScaled(width, height, 1.)
 		
-		verts = np.array(
-			[
-				[-width/2., -height/2.],
-				[width/2., -height/2.],
-				[-width/2., height/2.] ],
-			np.double)
-		glTexCoordPointerd(verts)
-		glVertexPointerd(verts)
-		glEnableClientState(GL_TEXTURE_COORD_ARRAY)
-		glEnableClientState(GL_VERTEX_ARRAY)
+		glBindTexture(GL_TEXTURE_2D, videoTex)
+		glTexCoordPointerd(RightTriTile.verts)
+		glVertexPointerd(RightTriTile.verts)
 		
 		glDrawArrays(GL_TRIANGLES, 0, 3)
 		
@@ -151,6 +220,34 @@ class RightTriTile(Tile):
 		if self == self.grid.grabbedTile:
 			glDisable(GL_BLEND)
 			glColor4d(0, 0, 0, 1)
+	
+	def drawHighlight(self, aspect):
+		width = aspect/self.grid.cols
+		height = 1.0/self.grid.rows
+		srcX = (self.srcLoc[0]+0.5)*width
+		srcY = (self.srcLoc[1]+0.5)*height
+		col, row, dstIdx = self.grid.tiles.inv[self]
+		dstX = (col+0.5)*width
+		dstY = (row+0.5)*height
+		glPushMatrix()
+		glTranslated(dstX, dstY, 0.)
+		glRotated(180*dstIdx, 0, 0, 1)
+		glScaled(width, height, 1.)
+		
+		glEnable(GL_BLEND)
+		glBindTexture(GL_TEXTURE_2D, RightTriTile.hlTex)
+		glTexCoordPointerd(RightTriTile.hlSideTexCoords)
+		glVertexPointerd(RightTriTile.hlSideVerts)
+		glDrawArrays(GL_QUADS, 0, len(RightTriTile.hlSideVerts))
+		for i in range(len(RightTriTile.hlCornerVerts)):
+			glTexCoordPointerd(RightTriTile.hlCornerTexCoords[i])
+			glVertexPointerd(RightTriTile.hlCornerVerts[i])
+			glDrawArrays(
+				GL_TRIANGLE_FAN, 0,
+				len(RightTriTile.hlCornerVerts[i]))
+		glDisable(GL_BLEND)
+		
+		glPopMatrix()
 	
 	def grabbed(self):
 		"""Is self currently grabbed?"""
@@ -168,6 +265,7 @@ def handleSizeChange(width, height, aspect):
 	texSize = 1
 	while texSize < max(width, height):
 		texSize *= 2
+	glBindTexture(GL_TEXTURE_2D, videoTex)
 	# Set the active texture to a blank texSize*texSize square (the image
 	# will be filled in later).
 	texInitializer = '\0' * (3*width*height)
@@ -206,11 +304,15 @@ if __name__ == '__main__':
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
 	glEnable(GL_TEXTURE_2D)
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE)
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY)
+	glEnableClientState(GL_VERTEX_ARRAY)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 	glClearColor(0.0, 0.0, 0.0, 1.0)
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
+	videoTex = glGenTextures(1)
+	glBindTexture(GL_TEXTURE_2D, videoTex)
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
 	grid = RightTriGrid(2, 3)
 	VideoDecode.init(
 		os.path.join(os.path.expanduser('~'), '.xine', 'config'),
@@ -228,6 +330,7 @@ if __name__ == '__main__':
 				oldWidth = width
 				oldHeight = height
 			glClear(GL_COLOR_BUFFER_BIT)
+			glBindTexture(GL_TEXTURE_2D, videoTex)
 			glTexSubImage2D(
 				GL_TEXTURE_2D, 0, 0, 0, width, height,
 				GL_RGB, GL_UNSIGNED_BYTE, data)
