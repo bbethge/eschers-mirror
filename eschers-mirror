@@ -13,6 +13,7 @@ import os
 from bidict import bidict
 import numpy as np
 from math import *  # math is delicious
+import random
 
 windowSize = 640, 480
 videoSize = 1, 1
@@ -116,7 +117,6 @@ class RightTriGrid:
 		return True
 	
 	def shuffle(self):
-		import random
 		locs = self.tiles.keys()
 		for i in range(len(locs)-1):
 			self.swapTiles(locs[i], random.choice(locs[i+1:]))
@@ -268,6 +268,37 @@ class RightTriTile(Tile):
 		"""Is self currently grabbed?"""
 		return self.grid.grabbedTile == self
 
+class TimeDisplay:
+	def __init__(self, time):
+		timeStr = "%d:%02d" % (int(time/60), int(time%60))
+		font = pygame.font.Font("font.ttf", windowSize[1]/4)
+		surface = font.render(timeStr, True, (255,255,0))
+		self.size = surface.get_size()
+		self.pixelDataRowLength = surface.get_pitch()/4
+		self.pixelData = str(surface.get_buffer().raw)
+			# .raw is a string, but I can't see how it can exist
+			# without the surface, so I try to make a copy of it.
+		del surface
+	
+	def draw(self):
+		glRasterPos2d(
+			videoAspect*(1.-float(self.size[0])/videoSize[0])/2.,
+			(1.+float(self.size[1])/videoSize[1]) / 2.)
+		oldRowLength = glGetInteger(GL_UNPACK_ROW_LENGTH)
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, self.pixelDataRowLength)
+		oldZoomX = glGetDouble(GL_ZOOM_X)
+		oldZoomY = glGetDouble(GL_ZOOM_Y)
+		glPixelZoom(1., -1.)
+		glDisable(GL_TEXTURE_2D)
+		glEnable(GL_BLEND)
+		glDrawPixels(
+			self.size[0], self.size[1], GL_BGRA, GL_UNSIGNED_BYTE,
+			self.pixelData)
+		glDisable(GL_BLEND)
+		glEnable(GL_TEXTURE_2D)
+		glPixelZoom(oldZoomX, oldZoomY)
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, oldRowLength)
+
 def handleSizeChange(width, height, aspect):
 	global videoSize, videoAspect, videoOrigin
 	if aspect >= float(windowSize[0])/windowSize[1]:
@@ -315,6 +346,7 @@ def getMousePos():
 
 if __name__ == '__main__':
 	pygame.display.init()
+	pygame.font.init()
 	pygame.display.set_mode(windowSize, pygame.OPENGL|pygame.DOUBLEBUF)
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
 	glEnable(GL_TEXTURE_2D)
