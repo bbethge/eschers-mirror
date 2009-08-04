@@ -14,12 +14,53 @@ from bidict import bidict
 import numpy as np
 from math import *  # math is delicious
 import random
+import weakref
 
 windowSize = 640, 480
 videoSize = 1, 1
 videoOrigin = 0., 0.
 videoAspect = 1.
 videoTex = 0
+
+class Signal:
+	"""
+	A Signal object maintains a list of callbacks which are added and
+	removed by parts of the code which are interested in the corresponding
+	event.  When the Signal's owner calls the emit method, all the currently
+	registered callbacks are called.
+	"""
+	def __init__(self):
+		self.callbacks = set()
+		self.methodCallbacks = weakref.WeakValueDictionary()
+	
+	def addHandler(self, handler, obj=None):
+		"""
+		Add a signal handler.
+		handler: a function or an unbound method
+		obj: if handler is an unbound method, this is the object to call
+		     the method on
+		Passing a bound method (with obj==None) should work, but will
+		keep the object that the method is bound to alive until the
+		handler is explicitly removed.  Passing the object and the
+		method separately allows the handler to be automatically removed
+		when the object is no longer needed.
+		"""
+		if obj == None:
+			self.callbacks.add(handler)
+		else:
+			self.methodCallbacks[handler,weakref.ref(obj)] = obj
+	
+	def removeHandler(self, handler, obj=None):
+		if obj == None:
+			self.callbacks.remove(handler)
+		else:
+			del self.methodCallbacks[handler,weakref.ref(obj)]
+	
+	def emit(self, *args, **kwargs):
+		for cb in self.callbacks:
+			cb(*args, **kwargs)
+		for cb, objRef in self.methodCallbacks.keys():
+			cb(objRef(), *args, **kwargs)
 
 class Tile:
 	def grabNotify(self):
