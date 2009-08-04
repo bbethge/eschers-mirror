@@ -114,6 +114,12 @@ class RightTriGrid:
 			if loc != tile.srcLoc:
 				return False
 		return True
+	
+	def shuffle(self):
+		import random
+		locs = self.tiles.keys()
+		for i in range(len(locs)-1):
+			self.swapTiles(locs[i], random.choice(locs[i+1:]))
 
 class RightTriTile(Tile):
 	verts = np.array(
@@ -323,6 +329,7 @@ if __name__ == '__main__':
 	glBindTexture(GL_TEXTURE_2D, videoTex)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
 	grid = RightTriGrid(2, 3)
+	grid.shuffle()
 	VideoDecode.init(
 		os.path.join(os.path.expanduser('~'), '.xine', 'config'),
 		sys.argv[1])
