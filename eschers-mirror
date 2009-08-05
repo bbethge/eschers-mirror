@@ -16,11 +16,7 @@ from math import *  # math is delicious
 import random
 import weakref
 
-windowSize = 640, 480
-videoSize = 1, 1
-videoOrigin = 0., 0.
-videoAspect = 1.
-videoTex = 0
+winSize = 640, 480
 
 class Signal:
 	"""
@@ -62,6 +58,148 @@ class Signal:
 		for cb, objRef in self.methodCallbacks.keys():
 			cb(objRef(), *args, **kwargs)
 
+class Grid:
+	"""
+	The base class for all grid types, which manage the state of a puzzle.
+	
+	Data members:
+	vidSize: the pixel size of the video as it appears on-screen
+	vidOrigin: the window coordinates of the origin (lower left) of where
+		the video will be drawn
+	vidAspect: the aspect ratio the video should be displayed at
+	srcVidSize: the pixel size of the source video, which is stored in a
+		texture
+	vidTex: the texture object holding the current video frame
+	"""
+	def __init__(self):
+		self.vidTex = glGenTextures(1)
+		glBindTexture(GL_TEXTURE_2D, self.vidTex)
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+		VideoDecode.init(
+			os.path.join(os.path.expanduser('~'), '.xine', 'config'),
+			sys.argv[1])
+		self.vidSize = 1, 1
+		self.vidAspect = 1.
+	
+	def run(self):
+		"""
+		Run the main event loop for the puzzle.  This will not return
+		until the puzzle is finished -- either won, lost, or aborted.
+		"""
+		VideoDecode.start()
+		done = False
+		while not done:
+			width, height, aspect, data = VideoDecode.getFrame(50)
+			if width != None:
+				self.handleFrame((width,height), aspect, data)
+			while True:
+				event = pygame.event.poll()
+				if event.type == NOEVENT:
+					break
+				if event.type == QUIT:
+					done = True
+					break
+				self.handleEvent(event)
+		VideoDecode.stop()
+		VideoDecode.quit()
+	
+	def handleFrame(self, size, aspect, data):
+		if self.vidSize != size or self.vidAspect != aspect:
+			self.handleSizeChange(size[0], size[1], aspect)
+		glClear(GL_COLOR_BUFFER_BIT)
+		glBindTexture(GL_TEXTURE_2D, self.vidTex)
+		glTexSubImage2D(
+			GL_TEXTURE_2D, 0, 0, 0, size[0], size[1],
+			GL_RGB, GL_UNSIGNED_BYTE, data)
+		self.draw()
+		pygame.display.flip()
+	
+	def handleEvent(self, event):
+		if event.type == MOUSEBUTTONDOWN:
+			if event.button == 1: # left?
+				self.grabTile(self.transformMousePos(*event.pos))
+			elif event.button == 2: # right?
+				self.rotateGrabbed(1)
+		elif event.type == MOUSEBUTTONUP:
+			if event.button == 1:
+				self.releaseTile(self.transformMousePos(*event.pos))
+		elif event.type == KEYDOWN:
+			if event.key == K_r:
+				self.rotateGrabbed(1)
+	
+	def handleSizeChange(self, width, height, aspect):
+		if aspect >= float(winSize[0])/winSize[1]:
+			self.vidSize = winSize[0], round(winSize[0]/aspect)
+		else:
+			self.vidSize = round(winSize[1]*aspect), winSize[1]
+		self.vidOrigin = [
+			(w-v)/2 for w, v in zip(winSize, self.vidSize) ]
+		self.vidAspect = aspect
+		self.srcVidSize = width, height
+		# Find the smallest power-of-2--sized square that can contain
+		# the frame
+		texSize = 1
+		while texSize < max(width, height):
+			texSize *= 2
+		glBindTexture(GL_TEXTURE_2D, self.vidTex)
+		# Set the active texture to a blank texSize*texSize square (the
+		# image will be filled in later).
+		texInitializer = np.zeros((texSize,texSize,3), np.uint8)
+		glTexImage2Dub(
+			GL_TEXTURE_2D, 0, GL_RGB, 0, GL_RGB, texInitializer)
+		# Set up the texture matrix to compensate for the pixel data
+		# being in top-to-bottom order.
+		glMatrixMode(GL_TEXTURE)
+		glLoadIdentity()
+		glScaled(1./texSize, -1./texSize, 1.)
+		glTranslated(0., -float(height), 0.)
+		# Set up the projection matrix so that the origin is at the
+		# lower left corner of the video.
+		glMatrixMode(GL_PROJECTION)
+		glLoadIdentity()
+		glOrtho(
+			-self.vidOrigin[0], winSize[0]-self.vidOrigin[0],
+			-self.vidOrigin[1], winSize[1]-self.vidOrigin[1],
+			-1.0, 1.0)
+		glMatrixMode(GL_MODELVIEW)
+	
+	def draw(self):
+		pass
+	
+	def grabTile(self, pos):
+		"""
+		Grab the tile under the cursor
+		"""
+		pass
+	
+	def releaseTile(self, pos):
+		pass
+	
+	def rotateGrabbed(self, dirxn):
+		"""
+		Rotate the currently grabbed tile to the next valid angle
+		(determined by the grid/tile type).  dirxn == 1 means ccw;
+		dirxn == -1 means cw.
+		"""
+		pass
+	
+	def isSolved(self):
+		"""
+		Does self have all its tiles in the right place?
+		"""
+		pass
+	
+	def shuffle(self):
+		pass
+
+	def transformMousePos(self, x, y):
+		return x-self.vidOrigin[0], winSize[1]-self.vidOrigin[1]-y
+	
+	def getMousePos(self):
+		return self.transformMousePos(*pygame.mouse.get_pos())
+
 class Tile:
 	def grabNotify(self):
 		"""Notfiy the tile that it has been grabbed"""
@@ -75,8 +213,9 @@ class Tile:
 		"""
 		pass
 
-class RightTriGrid:
+class RightTriGrid(Grid):
 	def __init__(self, rows, cols):
+		Grid.__init__(self)
 		self.cols = cols
 		self.rows = rows
 		self.tiles = bidict()
@@ -84,18 +223,19 @@ class RightTriGrid:
 		for loc in itertools.product(range(cols), range(rows), range(2)):
 			self.tiles[loc] =  RightTriTile(self, loc)
 		self.grabbedTile = None
+		self.shuffle()
 	
-	def draw(self, aspect):
+	def draw(self):
 		for tile in self.tiles.itervalues():
 			if tile is not self.grabbedTile:
-				tile.draw(aspect)
+				tile.draw(self.vidAspect)
 		if self.grabbedTile is not None:
-			pos = getMousePos()
-			if 0. <= pos[0] < videoAspect and 0. <= pos[1] < 1.:
+			pos = self.getMousePos()
+			if 0. <= pos[0] < self.vidSize[0] and 0. <= pos[1] < self.vidSize[1]:
 				loc = self.findTile(pos)
 				if self.grabbedIdx == loc[2]:
-					self.tiles[loc].drawHighlight(aspect)
-			self.grabbedTile.draw(aspect)
+					self.tiles[loc].drawHighlight(self.vidAspect)
+			self.grabbedTile.draw(self.vidAspect)
 	
 	def swapTiles(self, loc1, loc2):
 		tile1 = self.tiles[loc1]
@@ -103,36 +243,30 @@ class RightTriGrid:
 		self.tiles[loc2] = tile1
 	
 	def grabTile(self, pos):
-		"""Grab the tile under the cursor"""
 		if self.grabbedTile is None:
-			if 0. <= pos[0] < videoAspect and 0. <= pos[1] < 1.:
+			if 0. <= pos[0] < self.vidSize[0] and 0. <= pos[1] < self.vidSize[1]:
 				loc = self.findTile(pos)
 				self.grabbedTile = self.tiles[loc]
 				self.grabOffset = (
-					(loc[0]+0.5)*videoAspect/self.cols - pos[0],
-					(loc[1]+0.5)/self.rows - pos[1])
+					(loc[0]+0.5)*self.vidSize[0]/self.cols - pos[0],
+					(loc[1]+0.5)*self.vidSize[1]/self.rows - pos[1])
 				self.grabbedIdx = loc[2]
 	
 	def rotateGrabbed(self, dirxn):
-		"""
-		Rotate the currently grabbed tile to the next valid angle
-		(determined by the grid/tile type).  dirxn == 1 means ccw;
-		dirxn == -1 means cw.
-		"""
 		if self.grabbedTile is not None:
 			self.grabbedIdx = (self.grabbedIdx+dirxn) % 2
 			self.grabOffset = [ -x for x in self.grabOffset ]
 	
 	def findTile(self, pos):
 		"""
-		Find the location (col, row, idx) of the tile at normalized
+		Find the location (col, row, idx) of the tile at video
 		coordinates pos
 		"""
-		col = int(self.cols*pos[0]/videoAspect)
-		row = int(self.rows*pos[1])
-		cellX = self.cols*pos[0]/videoAspect - col
-		cellY = self.rows*pos[1] - row
-		if cellX + cellY < 1:
+		col = int(self.cols*pos[0]/self.vidSize[0])
+		row = int(self.rows*pos[1]/self.vidSize[1])
+		cellX = float(self.cols*pos[0])/self.vidSize[0] - col
+		cellY = float(self.rows*pos[1])/self.vidSize[1] - row
+		if cellX + cellY < 1.:
 			idx = 0
 		else:
 			idx = 1
@@ -141,7 +275,7 @@ class RightTriGrid:
 	def releaseTile(self, pos):
 		if self.grabbedTile is None:
 			return
-		if 0. <= pos[0] < videoAspect and 0. <= pos[1] < 1.:
+		if 0. <= pos[0] < self.vidSize[0] and 0. <= pos[1] < self.vidSize[1]:
 			loc = self.findTile(pos)
 			if loc[2] == self.grabbedIdx:
 				self.swapTiles(
@@ -149,9 +283,6 @@ class RightTriGrid:
 			self.grabbedTile = None
 	
 	def isSolved(self):
-		"""
-		Does self have all its tiles in the right place?
-		"""
 		for loc, tile in self.tiles.iteritems():
 			if loc != tile.srcLoc:
 				return False
@@ -185,10 +316,10 @@ class RightTriTile(Tile):
 		hlSideVerts[4*i+1] = verts[i] + offset
 		hlSideVerts[4*i+2] = verts[nextI] + offset
 		hlSideVerts[4*i+3] = verts[nextI]
-		hlSideTexCoords[4*i] = [0.5, 1.]
-		hlSideTexCoords[4*i+1] = [1.5, 1.]
-		hlSideTexCoords[4*i+2] = [1.5, 1.]
-		hlSideTexCoords[4*i+3] = [0.5, 1.]
+		hlSideTexCoords[4*i] = [0., 0.5]
+		hlSideTexCoords[4*i+1] = [1., 0.5]
+		hlSideTexCoords[4*i+2] = [1., 0.5]
+		hlSideTexCoords[4*i+3] = [0., 0.5]
 	hlCornerVerts = []
 	hlCornerTexCoords = []
 	for i in range(len(verts)):
@@ -216,7 +347,7 @@ class RightTriTile(Tile):
 		hlCornerVerts += [fanVerts]
 		hlCornerTexCoords += [
 			np.array(
-				[[0.5, 1.]] + [[1.5, 1.]]*(slices+1),
+				[[0., 0.5]] + [[1., 0.5]]*(slices+1),
 				np.double)
 			]
 	
@@ -228,8 +359,8 @@ class RightTriTile(Tile):
 			glBindTexture(GL_TEXTURE_2D, RightTriTile.hlTex)
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
 			texels = np.array(
-				[	[ [255, 255, 0, 255], [127, 255, 0,   0] ],
-					[ [255, 255, 0, 255], [127, 255, 0,   0] ] ],
+				[	[ [255, 255, 0, 255], [127, 255, 0, 0] ],
+					[ [255, 255, 0, 255], [127, 255, 0, 0] ] ],
 				np.uint8)
 			glTexImage2Dub(
 				GL_TEXTURE_2D, 0, GL_RGBA, 0, GL_RGBA, texels)
@@ -239,12 +370,14 @@ class RightTriTile(Tile):
 		Draw the tile.
 		aspect: aspect ratio of the video
 		"""
-		width = aspect/self.grid.cols
-		height = 1.0/self.grid.rows
-		srcX = (self.srcLoc[0]+0.5)*width
-		srcY = (self.srcLoc[1]+0.5)*height
+		width = float(self.grid.vidSize[0])/self.grid.cols
+		height = float(self.grid.vidSize[1])/self.grid.rows
+		srcWidth = float(self.grid.srcVidSize[0])/self.grid.cols
+		srcHeight = float(self.grid.srcVidSize[1])/self.grid.rows
+		srcX = (self.srcLoc[0]+0.5)*srcWidth
+		srcY = (self.srcLoc[1]+0.5)*srcHeight
 		if self.grabbed():
-			mouseX, mouseY = getMousePos()
+			mouseX, mouseY = grid.getMousePos()
 			dstX = mouseX + self.grid.grabOffset[0]
 			dstY = mouseY + self.grid.grabOffset[1]
 			dstIdx = self.grid.grabbedIdx
@@ -262,9 +395,9 @@ class RightTriTile(Tile):
 		glPushMatrix()
 		glTranslated(srcX, srcY, 0.)
 		glRotated(180*self.srcLoc[2], 0, 0, 1)
-		glScaled(width, height, 1.)
+		glScaled(srcWidth, srcHeight, 1.)
 		
-		glBindTexture(GL_TEXTURE_2D, videoTex)
+		glBindTexture(GL_TEXTURE_2D, self.grid.vidTex)
 		glTexCoordPointerd(RightTriTile.verts)
 		glVertexPointerd(RightTriTile.verts)
 		
@@ -278,10 +411,8 @@ class RightTriTile(Tile):
 			glColor4d(0, 0, 0, 1)
 	
 	def drawHighlight(self, aspect):
-		width = aspect/self.grid.cols
-		height = 1.0/self.grid.rows
-		srcX = (self.srcLoc[0]+0.5)*width
-		srcY = (self.srcLoc[1]+0.5)*height
+		width = float(self.grid.vidSize[0])/self.grid.cols
+		height = float(self.grid.vidSize[1])/self.grid.rows
 		col, row, dstIdx = self.grid.tiles.inv[self]
 		dstX = (col+0.5)*width
 		dstY = (row+0.5)*height
@@ -289,6 +420,11 @@ class RightTriTile(Tile):
 		glTranslated(dstX, dstY, 0.)
 		glRotated(180*dstIdx, 0, 0, 1)
 		glScaled(width, height, 1.)
+		glMatrixMode(GL_TEXTURE)
+		glPushMatrix()
+		glLoadIdentity()
+		glScaled(0.5, 1., 1.)
+		glTranslated(0.5, 0., 0.)
 		
 		glEnable(GL_BLEND)
 		glBindTexture(GL_TEXTURE_2D, RightTriTile.hlTex)
@@ -304,6 +440,8 @@ class RightTriTile(Tile):
 		glDisable(GL_BLEND)
 		
 		glPopMatrix()
+		glMatrixMode(GL_MODELVIEW)
+		glPopMatrix()
 	
 	def grabbed(self):
 		"""Is self currently grabbed?"""
@@ -312,7 +450,7 @@ class RightTriTile(Tile):
 class TimeDisplay:
 	def __init__(self, time):
 		timeStr = "%d:%02d" % (int(time/60), int(time%60))
-		font = pygame.font.Font("font.ttf", windowSize[1]/4)
+		font = pygame.font.Font("font.ttf", winSize[1]/4)
 		surface = font.render(timeStr, True, (255,255,0))
 		self.size = surface.get_size()
 		self.pixelDataRowLength = surface.get_pitch()/4
@@ -322,9 +460,10 @@ class TimeDisplay:
 		del surface
 	
 	def draw(self):
+		# FIXME
 		glRasterPos2d(
-			videoAspect*(1.-float(self.size[0])/videoSize[0])/2.,
-			(1.+float(self.size[1])/videoSize[1]) / 2.)
+			vidAspect*(1.-float(self.size[0])/vidSize[0])/2.,
+			(1.+float(self.size[1])/vidSize[1]) / 2.)
 		oldRowLength = glGetInteger(GL_UNPACK_ROW_LENGTH)
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, self.pixelDataRowLength)
 		oldZoomX = glGetDouble(GL_ZOOM_X)
@@ -340,55 +479,10 @@ class TimeDisplay:
 		glPixelZoom(oldZoomX, oldZoomY)
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, oldRowLength)
 
-def handleSizeChange(width, height, aspect):
-	global videoSize, videoAspect, videoOrigin
-	if aspect >= float(windowSize[0])/windowSize[1]:
-		videoSize = windowSize[0], round(windowSize[0]/aspect)
-	else:
-		videoSize = round(windowSize[1]*aspect), windowSize[1]
-	videoOrigin = [ (w-v)/2 for w, v in zip(windowSize, videoSize) ]
-	videoAspect = aspect
-	# Find the smallest power-of-2--sized square that can contain the frame
-	texSize = 1
-	while texSize < max(width, height):
-		texSize *= 2
-	glBindTexture(GL_TEXTURE_2D, videoTex)
-	# Set the active texture to a blank texSize*texSize square (the image
-	# will be filled in later).
-	texInitializer = '\0' * (3*width*height)
-	glTexImage2D(
-		GL_TEXTURE_2D, 0, GL_RGB, texSize, texSize, 0,
-		GL_RGB, GL_UNSIGNED_BYTE, texInitializer)
-	# Set up the texture matrix so that the image occupies a region aspect
-	# wide by 1.0 high.
-	glMatrixMode(GL_TEXTURE)
-	glLoadIdentity()
-	glTranslated(0.0, float(height)/texSize, 0.0)
-	glScaled(float(width)/texSize/aspect, -float(height)/texSize, 1.0)
-	# Set up the projection matrix so that the rectangle occupied by the
-	# video is aspect wide by 1.0 high, with the origin in the lower left.
-	glMatrixMode(GL_PROJECTION)
-	glLoadIdentity()
-	glOrtho(
-		-float(videoOrigin[0])*aspect/videoSize[0],
-		float(windowSize[0]-videoOrigin[0])*aspect/videoSize[0],
-		-float(windowSize[1]-videoSize[1]-videoOrigin[1])/videoSize[1],
-		float(videoOrigin[1]+videoSize[1])/videoSize[1],
-		-1.0, 1.0)
-	glMatrixMode(GL_MODELVIEW)
-
-def transformMousePos(x, y):
-	return (
-		float(x-videoOrigin[0])*videoAspect/videoSize[0],
-		float(videoOrigin[1]+videoSize[1]-y-1)/videoSize[1])
-
-def getMousePos():
-	return transformMousePos(*pygame.mouse.get_pos())
-
 if __name__ == '__main__':
 	pygame.display.init()
 	pygame.font.init()
-	pygame.display.set_mode(windowSize, pygame.OPENGL|pygame.DOUBLEBUF)
+	pygame.display.set_mode(winSize, pygame.OPENGL|pygame.DOUBLEBUF)
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
 	glEnable(GL_TEXTURE_2D)
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE)
@@ -398,50 +492,6 @@ if __name__ == '__main__':
 	glClearColor(0.0, 0.0, 0.0, 1.0)
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
-	videoTex = glGenTextures(1)
-	glBindTexture(GL_TEXTURE_2D, videoTex)
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+	
 	grid = RightTriGrid(2, 3)
-	grid.shuffle()
-	VideoDecode.init(
-		os.path.join(os.path.expanduser('~'), '.xine', 'config'),
-		sys.argv[1])
-	VideoDecode.start()
-
-	oldWidth = 0
-	oldHeight = 0
-	done = False
-	while not done:
-		width, height, aspect, data = VideoDecode.getFrame(50)
-		if width != None:
-			if oldWidth != width or oldHeight != height or videoAspect != aspect:
-				handleSizeChange(width, height, aspect)
-				oldWidth = width
-				oldHeight = height
-			glClear(GL_COLOR_BUFFER_BIT)
-			glBindTexture(GL_TEXTURE_2D, videoTex)
-			glTexSubImage2D(
-				GL_TEXTURE_2D, 0, 0, 0, width, height,
-				GL_RGB, GL_UNSIGNED_BYTE, data)
-			grid.draw(videoAspect)
-			pygame.display.flip()
-		while True:
-			event = pygame.event.poll()
-			if event.type == NOEVENT:
-				break
-			if event.type == QUIT:
-				done = True
-				break
-			if event.type == MOUSEBUTTONDOWN:
-				if event.button == 1: # left?
-					grid.grabTile(transformMousePos(*event.pos))
-				elif event.button == 2: # right?
-					grid.rotateGrabbed(1)
-			elif event.type == MOUSEBUTTONUP:
-				if event.button == 1:
-					grid.releaseTile(transformMousePos(*event.pos))
-			elif event.type == KEYDOWN:
-				if event.key == K_r:
-					grid.rotateGrabbed(1)
-	VideoDecode.stop()
-	VideoDecode.quit()
+	grid.run()
