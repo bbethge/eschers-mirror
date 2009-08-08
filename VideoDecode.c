@@ -142,16 +142,24 @@ VideoDecode_getFrame(PyObject *self, PyObject *args) {
 	return result;
 }
 
+static PyObject*
+VideoDecode_getPosition(PyObject *self, PyObject *args) {
+	int pos_stream, pos_time, length_time;
+	xine_get_pos_length(xine_stream, &pos_stream, &pos_time, &length_time);
+	return Py_BuildValue("d", pos_time/1000.0);
+}
+
 static PyMethodDef VideoDecode_methods[] = {
 	{ "init", VideoDecode_init, METH_VARARGS, "" },
 	{ "quit", VideoDecode_quit, METH_VARARGS, "" },
 	{ "start", VideoDecode_start, METH_VARARGS, "" },
 	{ "stop", VideoDecode_stop, METH_VARARGS, "" },
 	{ "getFrame", VideoDecode_getFrame, METH_VARARGS, "" },
+	{ "getPosition", VideoDecode_getPosition, METH_VARARGS, "" },
 	{ NULL, NULL, 0, NULL }
 };
 
 PyMODINIT_FUNC
 initVideoDecode(void) {
-	PyObject *module = Py_InitModule("VideoDecode", VideoDecode_methods);
+	Py_InitModule("VideoDecode", VideoDecode_methods);
 }

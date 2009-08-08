@@ -1,20 +1,21 @@
 #!/usr/bin/env python
 
-import sys
-sys.path += ['build/lib.linux-x86_64-2.6'] # HACK
 import OpenGL
 #OpenGL.ERROR_CHECKING = False
 OpenGL.ERROR_ON_COPY = True
 from OpenGL.GL import *
 import pygame
 from pygame.locals import *
-import VideoDecode
 import os
 from bidict import bidict
 import numpy as np
 from math import *  # math is delicious
 import random
 import weakref
+import sys
+from glob import glob
+sys.path += glob(os.path.join('build', '*', ''))
+import VideoDecode
 
 winSize = 640, 480
 
@@ -200,25 +201,13 @@ class Grid:
 	def getMousePos(self):
 		return self.transformMousePos(*pygame.mouse.get_pos())
 
-class Tile:
-	def grabNotify(self):
-		"""Notfiy the tile that it has been grabbed"""
-		pass
-	
-	def rotate(self, dir):
-		"""
-		Rotate the tile to the next valid angle (determined by the
-		grid/tile type).  dir == 1 means ccw; dir == -1 means cw.  Has
-		no effect if the grid does not allow rotations.
-		"""
-		pass
-
 class RightTriGrid(Grid):
 	def __init__(self, rows, cols):
 		Grid.__init__(self)
 		self.cols = cols
 		self.rows = rows
 		self.tiles = bidict()
+		self.timeDisplay = None
 		import itertools
 		for loc in itertools.product(range(cols), range(rows), range(2)):
 			self.tiles[loc] =  RightTriTile(self, loc)
@@ -236,6 +225,8 @@ class RightTriGrid(Grid):
 				if self.grabbedIdx == loc[2]:
 					self.tiles[loc].drawHighlight(self.vidAspect)
 			self.grabbedTile.draw(self.vidAspect)
+		if self.timeDisplay is not None:
+			self.timeDisplay.draw()
 	
 	def swapTiles(self, loc1, loc2):
 		tile1 = self.tiles[loc1]
@@ -281,6 +272,9 @@ class RightTriGrid(Grid):
 				self.swapTiles(
 					loc, self.tiles.inv[self.grabbedTile])
 			self.grabbedTile = None
+			if self.isSolved():
+				self.timeDisplay = \
+					TimeDisplay(self, VideoDecode.getPosition())
 	
 	def isSolved(self):
 		for loc, tile in self.tiles.iteritems():
@@ -293,7 +287,7 @@ class RightTriGrid(Grid):
 		for i in range(len(locs)-1):
 			self.swapTiles(locs[i], random.choice(locs[i+1:]))
 
-class RightTriTile(Tile):
+class RightTriTile:
 	verts = np.array(
 		[	[-0.5, -0.5],
 			[ 0.5, -0.5],
@@ -448,7 +442,8 @@ class RightTriTile(Tile):
 		return self.grid.grabbedTile == self
 
 class TimeDisplay:
-	def __init__(self, time):
+	def __init__(self, grid, time):
+		self.grid = grid
 		timeStr = "%d:%02d" % (int(time/60), int(time%60))
 		font = pygame.font.Font("font.ttf", winSize[1]/4)
 		surface = font.render(timeStr, True, (255,255,0))
@@ -460,10 +455,9 @@ class TimeDisplay:
 		del surface
 	
 	def draw(self):
-		# FIXME
 		glRasterPos2d(
-			vidAspect*(1.-float(self.size[0])/vidSize[0])/2.,
-			(1.+float(self.size[1])/vidSize[1]) / 2.)
+			(self.grid.vidSize[0]-self.size[0])/2.,
+			(self.grid.vidSize[1]+self.size[1])/2.)
 		oldRowLength = glGetInteger(GL_UNPACK_ROW_LENGTH)
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, self.pixelDataRowLength)
 		oldZoomX = glGetDouble(GL_ZOOM_X)
