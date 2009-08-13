@@ -28,8 +28,8 @@ init.argtypes = [ POINTER(xine_t) ]
 init.restype = None
 
 raw_output_cb_t = CFUNCTYPE(
-	None,
-	c_void_p, c_int, c_int, c_int, c_double, c_void_p, c_void_p, c_void_p)
+	None, c_void_p, c_int, c_int, c_int, c_double, POINTER(c_ubyte),
+	c_void_p, c_void_p)
 
 class raw_overlay_t(Structure):
 	pass
@@ -51,6 +51,7 @@ class audio_port_t(Structure):
 open_audio_driver = xine.xine_open_audio_driver
 open_audio_driver.argtypes = [ POINTER(xine_t), c_char_p, c_void_p ]
 open_audio_driver.restype = POINTER(audio_port_t)
+
 class video_port_t(Structure):
 	pass
 
@@ -103,3 +104,12 @@ exit.restype = None
 get_pos_length = xine.xine_get_pos_length
 get_pos_length.argtypes = [
 	POINTER(stream_t), POINTER(c_int), POINTER(c_int), POINTER(c_int) ]
+
+# This doesn't seem to work
+#__all__ = [
+#	'check_version', 'xine_t', 'new', 'config_load', 'init',
+#	'raw_output_cb_t', 'raw_overlay_t', 'raw_overlay_cb_t', 'raw_visual_t',
+#	'VORAW_RGB', 'VISUAL_TYPE_RAW', 'audio_port_t', 'open_audio_driver',
+#	'video_port_t', 'open_video_driver', 'stream_t', 'stream_new', 'open_',
+#	'get_error', 'close_audio_driver', 'close_video_driver', 'play', 'stop',
+#	'close', 'exit', 'get_pos_length' ]

@@ -15,10 +15,12 @@ import numpy as np
 from math import *  # math is delicious
 import random
 import weakref
+import threading
+import MiniXine as xine
+import ctypes
 import sys
 from glob import glob
 sys.path += glob(os.path.join('build', '*', ''))
-import VideoDecode
 
 winSize = 640, 480
 
@@ -75,30 +77,88 @@ class Grid:
 		texture
 	vidTex: the texture object holding the current video frame
 	"""
-	def __init__(self):
+	def __init__(self, mrl):
 		self.vidTex = glGenTextures(1)
 		glBindTexture(GL_TEXTURE_2D, self.vidTex)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-		VideoDecode.init(
-			os.path.join(os.path.expanduser('~'), '.xine', 'config'),
-			sys.argv[1])
 		self.vidSize = 1, 1
 		self.vidAspect = 1.
 		self.srcVidSize = 1, 1
+		
+		self.xine = xine.new()
+		if not self.xine:
+			raise RuntimeError, "xine_new failed"
+		xine.config_load(
+			self.xine,
+			os.path.join(os.path.expanduser('~'), '.xine', 'config'))
+		xine.init(self.xine)
+		# Obligatory references to callback functions to keep them from
+		# being garbage collected
+		self.rawOutputCbRef = lambda u1, f, w, h, a, d, u2, u3: None
+		self.rawOverlayCbRef = lambda d, n, o: None
+		visual_info = xine.raw_visual_t(
+			user_data = None,
+			supported_formats = xine.VORAW_RGB,
+			raw_output_cb = xine.raw_output_cb_t(self.rawOutputCbRef),
+			raw_overlay_cb = xine.raw_overlay_cb_t(self.rawOverlayCbRef))
+		self.videoDriver = xine.open_video_driver(
+			self.xine, None, xine.VISUAL_TYPE_RAW,
+			ctypes.byref(visual_info))
+		if not self.videoDriver:
+			xine.exit(self.xine)
+			raise RuntimeError, "Failed to open Xine video driver"
+		self.stream = xine.stream_new(
+			self.xine, ctypes.POINTER(xine.audio_port_t)(),
+			self.videoDriver)
+		if not xine.open_(self.stream, mrl):
+			xine.close_video_driver(self.xine, self.videoDriver)
+			xine.exit(self.xine)
+			raise RuntimeError, "Failed to open %s"%mrl
+		
+		self.frameUpdateCond = threading.Condition()
+	
+	def __del__(self):
+		print "Grid.__del__ called"
+		if not self.videoDriver:
+			xine.close_video_driver(self.xine, self.videoDriver)
+		if not self.xine:
+			xine.exit(self.xine)
+	
+	def frameCb(
+			self, unused1, format, width, height, aspect, data,
+			unused2, unused3):
+		self.frameUpdateCond.acquire()
+		self.newSize = width.value, height.value
+		self.newAspect = aspect.value
+		self.frameData = np.array(
+			ctypes.cast(
+				ctypes.pointer(data),
+				ctypes.c_ubyte*(width*height)),
+			np.uint8)
+		self.frameData = self.frameData.reshape((height, width, 3))
+		self.frameUpdateCond.notify()
+		self.frameUpdateCond.release()
 	
 	def run(self):
 		"""
 		Run the main event loop for the puzzle.  This will not return
 		until the puzzle is finished -- either won, lost, or aborted.
 		"""
-		VideoDecode.start()
+		if not xine.play(self.stream, 0, 0):
+			raise RuntimeError, "Failed to start playback"
 		done = False
 		while not done:
-			width, height, aspect, data = VideoDecode.getFrame(50)
-			if width != None:
-				self.handleFrame((width,height), aspect, data)
+			self.frameUpdateCond.acquire()
+			try:
+				self.frameUpdateCond.wait(0.050)
+			except RuntimeError:
+				# No frame for 50 ms -- weird, but not an error
+				pass
+			else:
+				self.handleFrame()
+			self.frameUpdateCond.release()
 			while True:
 				event = pygame.event.poll()
 				if event.type == NOEVENT:
@@ -113,16 +173,22 @@ class Grid:
 			# a frame yet?
 			self.draw()
 			pygame.display.flip()
-		VideoDecode.stop()
-		VideoDecode.quit()
+		xine.stop(self.stream)
+		xine.close_video_driver(self.xine, self.videoDriver)
+		self.videoDriver = None
+		xine.exit(self.xine)
+		self.xine = None
 	
-	def handleFrame(self, size, aspect, data):
-		if self.vidSize != size or self.vidAspect != aspect:
-			self.handleSizeChange(size[0], size[1], aspect)
+	def handleFrame(self):
+		"""Must be called with self.frameUpdateCond lock held"""
+		if self.vidSize != self.newSize \
+				or self.vidAspect != self.newAspect:
+			self.handleSizeChange(
+				self.newSize[0], self.newSize[1],
+				self.newAspect)
 		glBindTexture(GL_TEXTURE_2D, self.vidTex)
-		glTexSubImage2D(
-			GL_TEXTURE_2D, 0, 0, 0, size[0], size[1],
-			GL_RGB, GL_UNSIGNED_BYTE, data)
+		glTexSubImage2Dub(
+			GL_TEXTURE_2D, 0, 0, 0, GL_RGB, self.frameData)
 	
 	def handleEvent(self, event):
 		if event.type == MOUSEBUTTONDOWN:
@@ -209,8 +275,8 @@ class Grid:
 		return self.transformMousePos(*pygame.mouse.get_pos())
 
 class RightTriGrid(Grid):
-	def __init__(self, rows, cols):
-		Grid.__init__(self)
+	def __init__(self, mrl, rows, cols):
+		Grid.__init__(self, mrl)
 		self.cols = cols
 		self.rows = rows
 		self.tiles = bidict()
@@ -280,8 +346,15 @@ class RightTriGrid(Grid):
 					loc, self.tiles.inv[self.grabbedTile])
 			self.grabbedTile = None
 			if self.isSolved():
+				posStream = ctypes.c_int()
+				posTime = ctypes.c_int()
+				lengthTime = ctypes.c_int()
+				xine.get_pos_length(
+					self.stream, ctypes.byref(posStream),
+					ctypes.byref(posTime),
+					ctypes.byref(lengthTime))
 				self.timeDisplay = \
-					TimeDisplay(self, VideoDecode.getPosition())
+					TimeDisplay(self, posTime.value/1000.)
 	
 	def isSolved(self):
 		for loc, tile in self.tiles.iteritems():
@@ -488,6 +561,9 @@ Your time is
 		glPixelZoom(oldZoomX, oldZoomY)
 
 if __name__ == '__main__':
+	if not xine.check_version(1, 1, 12):
+		print "Xine version is too old"
+		sys.exit(1)
 	pygame.display.init()
 	pygame.font.init()
 	pygame.display.set_mode(winSize, pygame.OPENGL|pygame.DOUBLEBUF)
@@ -501,5 +577,5 @@ if __name__ == '__main__':
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
 	
-	grid = RightTriGrid(2, 3)
+	grid = RightTriGrid(sys.argv[1], 2, 3)
 	grid.run()
