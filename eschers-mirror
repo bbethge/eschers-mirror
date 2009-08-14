@@ -472,20 +472,26 @@ Your time is
 		del surface
 	
 	def draw(self):
+		glDisable(GL_TEXTURE_2D)
+		glEnable(GL_BLEND)
+		glColor4d(0., 0., 0., 0.5)
+		glRectd(
+			(self.grid.vidSize[0]-self.size[0])/2.,
+			(self.grid.vidSize[1]-self.size[1])/2.,
+			(self.grid.vidSize[0]+self.size[0])/2.,
+			(self.grid.vidSize[1]+self.size[1])/2.)
 		glRasterPos2d(
                         (self.grid.vidSize[0]-self.size[0])/2.,
                         (self.grid.vidSize[1]+self.size[1])/2.)
 		oldZoomX = glGetDouble(GL_ZOOM_X)
 		oldZoomY = glGetDouble(GL_ZOOM_Y)
 		glPixelZoom(1., -1.)
-		glDisable(GL_TEXTURE_2D)
-		glEnable(GL_BLEND)
 		glDrawPixels(
 			self.size[0], self.size[1], GL_RGBA, GL_UNSIGNED_BYTE,
 			self.pixelData)
+		glPixelZoom(oldZoomX, oldZoomY)
 		glDisable(GL_BLEND)
 		glEnable(GL_TEXTURE_2D)
-		glPixelZoom(oldZoomX, oldZoomY)
 
 if __name__ == '__main__':
 	pygame.display.init()
