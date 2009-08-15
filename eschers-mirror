@@ -497,6 +497,7 @@ if __name__ == '__main__':
 	pygame.display.init()
 	pygame.font.init()
 	pygame.display.set_mode(winSize, pygame.OPENGL|pygame.DOUBLEBUF)
+	pygame.display.set_caption("Escher's Mirror", "Escher's Mirror")
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
 	glEnable(GL_TEXTURE_2D)
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE)
