@@ -69,19 +69,29 @@ VideoDecode_init(PyObject *self, PyObject *args) {
 			xine, NULL, XINE_VISUAL_TYPE_RAW, &video_info
 		);
 	if (xine_video == NULL) {
+		xine_exit(xine);
 		PyErr_SetString(
 			PyExc_RuntimeError, "Failed to open xine video driver!"
 		);
 		return NULL;
 	}
-	//xine_audio = xine_open_audio_driver(xine, NULL, NULL);
+	xine_audio = xine_open_audio_driver(xine, NULL, NULL);
+	if (xine_audio == NULL) {
+		xine_close_video_driver(xine, xine_video);
+		xine_exit(xine);
+		PyErr_SetString(
+			PyExc_RuntimeError, "Failed to open xine audio dirver!"
+		);
+		return NULL;
+	}
 	xine_stream = xine_stream_new(xine, NULL, xine_video);
 	if (!xine_open(xine_stream, mrl) ) {
 		PyErr_SetString(PyExc_RuntimeError, "Failed to open MRL");
 		xine_close_video_driver(xine, xine_video);
+		xine_close_audio_driver(xine, xine_audio);
+		xine_exit(xine);
 		return NULL;
 	}
-	// TODO: check cleanup in exception-throwing code
 	
 	Py_RETURN_NONE;
 }
@@ -91,6 +101,9 @@ VideoDecode_quit(PyObject *self, PyObject *args) {
 	if (!PyArg_ParseTuple(args, "")) {
 		return NULL;
 	}
+	xine_dispose(xine_stream);
+	xine_close_audio_driver(xine, xine_audio);
+	xine_close_video_driver(xine, xine_video);
 	xine_exit(xine);
 	SDL_DestroyCond(frame.cond);
 	free(frame.data);
