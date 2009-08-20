@@ -2,7 +2,7 @@ This is Escher's Mirror, a pretentiously-named clone of the Atari Jaguar game
 VidGrid.  (The name may change if I come up with something that sucks less.)
 
 System Requirements
- * Python (http://python.org)
+ * Python (http://python.org), including C development files
  * SDL (http://www.libsdl.org), including development files
  * pygame (http://pygame.org)
  * xine-lib 1.1.12 or later (http://www.xine-project.org/releases), including
@@ -27,3 +27,8 @@ On UN*X, you can of course type ./eschers-mirror instead of
 
 That's it. You get to play one puzzle, then you are back to the command line.
 A friendlier and hopefully more fun interface is planned.
+
+Controls
+Left click and drag                   Move tile
+r key or right click while dragging   Rotate tile
+f key while dragging                  Flip tile
