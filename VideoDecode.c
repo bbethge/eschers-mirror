@@ -16,6 +16,9 @@ static struct {
 	SDL_mutex *mutex;  // Protects the above frame info
 	SDL_cond *cond;  // Indicates frame has been updated
 } frame = { 0, 0, 0.0, NULL };
+static xine_event_queue_t *xine_event_queue;
+static int playing;  // Boolean: is stream playing?
+static SDL_mutex *playing_mutex;  // Protects 'playing' (is this necessary?)
 
 static void frame_cb(
 	void *user_data, int format, int width, int height, double aspect,
@@ -23,6 +26,7 @@ static void frame_cb(
 ) {
 	SDL_LockMutex(frame.mutex);
 	if (frame.width != width || frame.height != height) {
+		// TODO: handle out-of-memory errors
 		frame.data = realloc(frame.data, 3*width*height);
 	}
 	memcpy(frame.data, data, 3*width*height);
@@ -38,6 +42,15 @@ overlay_cb(void *user_data, int num_ovl, raw_overlay_t *overlays_array) {
 	// Do nothing.
 }
 
+static void
+event_cb(void *user_data, const xine_event_t *event) {
+	if (event->type == XINE_EVENT_UI_PLAYBACK_FINISHED) {
+		SDL_LockMutex(playing_mutex);
+		playing = 0;
+		SDL_UnlockMutex(playing_mutex);
+	}
+}
+
 static PyObject*
 VideoDecode_init(PyObject *self, PyObject *args) {
 	const char *confFile;
@@ -49,6 +62,10 @@ VideoDecode_init(PyObject *self, PyObject *args) {
 	}
 	frame.mutex = SDL_CreateMutex();
 	frame.cond = SDL_CreateCond();
+	playing_mutex = SDL_CreateMutex();
+	if (frame.mutex == NULL || frame.cond == NULL || playing_mutex == NULL){
+		return PyErr_NoMemory();
+	}
 	if (!xine_check_version(1, 1, 12)) {
 		PyErr_SetString(PyExc_RuntimeError, "Xine version is too old");
 		return NULL;
@@ -80,7 +97,7 @@ VideoDecode_init(PyObject *self, PyObject *args) {
 		xine_close_video_driver(xine, xine_video);
 		xine_exit(xine);
 		PyErr_SetString(
-			PyExc_RuntimeError, "Failed to open xine audio dirver!"
+			PyExc_RuntimeError, "Failed to open xine audio driver!"
 		);
 		return NULL;
 	}
@@ -92,6 +109,15 @@ VideoDecode_init(PyObject *self, PyObject *args) {
 		xine_exit(xine);
 		return NULL;
 	}
+	xine_event_queue = xine_event_new_queue(xine_stream);
+	if (xine_event_queue == NULL) {
+		xine_dispose(xine_stream);
+		xine_close_video_driver(xine, xine_video);
+		xine_close_audio_driver(xine, xine_audio);
+		xine_exit(xine);
+		return PyErr_NoMemory();
+	}
+	xine_event_create_listener_thread(xine_event_queue, event_cb, NULL);
 	
 	Py_RETURN_NONE;
 }
@@ -101,6 +127,7 @@ VideoDecode_quit(PyObject *self, PyObject *args) {
 	if (!PyArg_ParseTuple(args, "")) {
 		return NULL;
 	}
+	xine_event_dispose_queue(xine_event_queue);
 	xine_dispose(xine_stream);
 	xine_close_audio_driver(xine, xine_audio);
 	xine_close_video_driver(xine, xine_video);
@@ -116,6 +143,9 @@ VideoDecode_start(PyObject *self, PyObject *args) {
 	if (!PyArg_ParseTuple(args, "")) {
 		return NULL;
 	}
+	SDL_LockMutex(playing_mutex);
+	playing = 1;
+	SDL_UnlockMutex(playing_mutex);
 	if (xine_play(xine_stream, 0, 0) == 0) {
 		PyErr_SetString(PyExc_RuntimeError, "Failed to start playback");
 		return NULL;
@@ -162,6 +192,15 @@ VideoDecode_getPosition(PyObject *self, PyObject *args) {
 	return Py_BuildValue("d", pos_time/1000.0);
 }
 
+static PyObject*
+VideoDecode_isPlaying(PyObject *self, PyObject *args) {
+	int playing_copy;
+	SDL_LockMutex(playing_mutex);
+	playing_copy = playing;
+	SDL_UnlockMutex(playing_mutex);
+	return Py_BuildValue("i", playing_copy);
+}
+
 static PyMethodDef VideoDecode_methods[] = {
 	{ "init", VideoDecode_init, METH_VARARGS, "" },
 	{ "quit", VideoDecode_quit, METH_VARARGS, "" },
@@ -169,6 +208,7 @@ static PyMethodDef VideoDecode_methods[] = {
 	{ "stop", VideoDecode_stop, METH_VARARGS, "" },
 	{ "getFrame", VideoDecode_getFrame, METH_VARARGS, "" },
 	{ "getPosition", VideoDecode_getPosition, METH_VARARGS, "" },
+	{ "isPlaying", VideoDecode_isPlaying, METH_VARARGS, "" },
 	{ NULL, NULL, 0, NULL }
 };
 
