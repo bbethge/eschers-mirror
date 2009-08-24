@@ -24,10 +24,10 @@ winSize = 640, 480
 
 class Signal:
 	"""
-	A Signal object maintains a list of callbacks which are added and
-	removed by parts of the code which are interested in the corresponding
-	event.  When the Signal's owner calls the emit method, all the currently
-	registered callbacks are called.
+	A Signal object maintains a list of callbacks which are added and removed by 
+	parts of the code which are interested in the corresponding event.  When the
+	Signal's owner calls the emit method, all the currently registered callbacks 
+	are called.
 	"""
 	def __init__(self):
 		self.callbacks = set()
@@ -37,13 +37,12 @@ class Signal:
 		"""
 		Add a signal handler.
 		handler: a function or an unbound method
-		obj: if handler is an unbound method, this is the object to call
-		     the method on
-		Passing a bound method (with obj==None) should work, but will
-		keep the object that the method is bound to alive until the
-		handler is explicitly removed.  Passing the object and the
-		method separately allows the handler to be automatically removed
-		when the object is no longer needed.
+		obj: if handler is an unbound method, this is the object to call the
+		     method on
+		Passing a bound method (with obj==None) should work, but will keep the 
+		object that the method is bound to alive until the handler is explicitly 
+		removed.  Passing the object and the method separately allows the
+		handler to be automatically removed when the object is no longer needed.
 		"""
 		if obj == None:
 			self.callbacks.add(handler)
@@ -76,8 +75,8 @@ class Actor:
 	
 	def update(self):
 		"""
-		This is called by the grid before every frame so the object can
-		update its state.
+		This is called by the grid before every frame so the object can update
+		its state.
 		"""
 		try:
 			self.runIter.next()
@@ -86,11 +85,11 @@ class Actor:
 	
 	def run(self):
 		"""
-		This should be a generator.  It should yield every time it
-		has finished updating itself for a particular frame.  The yield
-		will return when it is time to prepare for the next frame.  The
-		time since the previous frame can be found in self.grid.deltaT.
-		When this generator quits, the object is destroyed.
+		This should be a generator.  It should yield every time it has finished 
+		updating itself for a particular frame.  The yield will return when it 
+		is time to prepare for the next frame.  The time since the previous
+		frame can be found in self.grid.deltaT.  When this generator quits, the 
+		object is destroyed.
 		"""
 		pass
 
@@ -100,11 +99,10 @@ class Grid:
 	
 	Data members:
 	vidSize: the pixel size of the video as it appears on-screen
-	vidOrigin: the window coordinates of the origin (lower left) of where
-		the video will be drawn
+	vidOrigin: the window coordinates of the origin (lower left) of where the 
+	           video will be drawn
 	vidAspect: the aspect ratio the video should be displayed at
-	srcVidSize: the pixel size of the source video, which is stored in a
-		texture
+	srcVidSize: the pixel size of the source video, which is stored in a texture
 	vidTex: the texture object holding the current video frame
 	"""
 	def __init__(self):
@@ -130,15 +128,15 @@ class Grid:
 		self.actors.remove(actor)
 	
 	def updateActors(self):
-		# Actors may remove themselves during the update, so we must
-		# iterate over a copy of self.actors
+		# Actors may remove themselves during the update, so we must iterate 
+		# over a copy of self.actors
 		for actor in set(self.actors):
 			actor.update()
 	
 	def run(self):
 		"""
-		Run the main event loop for the puzzle.  This will not return
-		until the puzzle is finished -- either won, lost, or aborted.
+		Run the main event loop for the puzzle.  This will not return until the 
+		puzzle is finished -- either won, lost, or aborted.
 		"""
 		VideoDecode.start()
 		oldTimeMs = pygame.time.get_ticks()
@@ -160,9 +158,8 @@ class Grid:
 					break
 				self.handleEvent(event)
 			glClear(GL_COLOR_BUFFER_BIT)
-			# What happens if there is no current texture image
-			# attached to self.vidTex because we haven't received
-			# a frame yet?
+			# What happens if there is no current texture image attached to
+			# self.vidTex because we haven't received a frame yet?
 			self.draw()
 			self.drawOverlays.emit()
 			pygame.display.flip()
@@ -195,29 +192,26 @@ class Grid:
 			self.vidSize = winSize[0], round(winSize[0]/aspect)
 		else:
 			self.vidSize = round(winSize[1]*aspect), winSize[1]
-		self.vidOrigin = [
-			(w-v)/2 for w, v in zip(winSize, self.vidSize) ]
+		self.vidOrigin = [ (w-v)/2 for w, v in zip(winSize, self.vidSize) ]
 		self.vidAspect = aspect
 		self.srcVidSize = width, height
-		# Find the smallest power-of-2--sized square that can contain
-		# the frame
+		# Find the smallest power-of-2--sized square that can contain the frame
 		texSize = 1
 		while texSize < max(width, height):
 			texSize *= 2
 		glBindTexture(GL_TEXTURE_2D, self.vidTex)
-		# Set the active texture to a blank texSize*texSize square (the
-		# image will be filled in later).
+		# Set the active texture to a blank texSize*texSize square (the image 
+		# will be filled in later).
 		texInitializer = np.zeros((texSize,texSize,3), np.uint8)
-		glTexImage2Dub(
-			GL_TEXTURE_2D, 0, GL_RGB, 0, GL_RGB, texInitializer)
-		# Set up the texture matrix to compensate for the pixel data
-		# being in top-to-bottom order.
+		glTexImage2Dub(GL_TEXTURE_2D, 0, GL_RGB, 0, GL_RGB, texInitializer)
+		# Set up the texture matrix to compensate for the pixel data being in
+		# top-to-bottom order.
 		glMatrixMode(GL_TEXTURE)
 		glLoadIdentity()
 		glScaled(1./texSize, -1./texSize, 1.)
 		glTranslated(0., -float(height), 0.)
-		# Set up the projection matrix so that the origin is at the
-		# lower left corner of the video.
+		# Set up the projection matrix so that the origin is at the lower left
+		# corner of the video.
 		glMatrixMode(GL_PROJECTION)
 		glLoadIdentity()
 		glOrtho(
@@ -240,9 +234,8 @@ class Grid:
 	
 	def rotateGrabbed(self, dirxn):
 		"""
-		Rotate the currently grabbed tile to the next valid angle
-		(determined by the grid/tile type).  dirxn == 1 means ccw;
-		dirxn == -1 means cw.
+		Rotate the currently grabbed tile to the next valid angle (determined by 
+		the grid/tile type).  dirxn == 1 means ccw; dirxn == -1 means cw.
 		"""
 		pass
 	
@@ -256,7 +249,7 @@ class Grid:
 		pass
 
 	def transformMousePos(self, x, y):
-		return x-self.vidOrigin[0], winSize[1]-self.vidOrigin[1]-y
+		return x - self.vidOrigin[0], winSize[1] - self.vidOrigin[1] - y
 	
 	def getMousePos(self):
 		return self.transformMousePos(*pygame.mouse.get_pos())
@@ -307,8 +300,7 @@ class RightTriGrid(Grid):
 	
 	def findTile(self, pos):
 		"""
-		Find the location (col, row, idx) of the tile at video
-		coordinates pos
+		Find the location (col, row, idx) of the tile at video coordinates pos
 		"""
 		col = int(self.cols*pos[0]/self.vidSize[0])
 		row = int(self.rows*pos[1]/self.vidSize[1])
@@ -326,8 +318,7 @@ class RightTriGrid(Grid):
 		if 0. <= pos[0] < self.vidSize[0] and 0. <= pos[1] < self.vidSize[1]:
 			loc = self.findTile(pos)
 			if loc[2] == self.grabbedIdx:
-				self.swapTiles(
-					loc, self.tiles.inv[self.grabbedTile])
+				self.swapTiles(loc, self.tiles.inv[self.grabbedTile])
 			self.grabbedTile = None
 			if self.isSolved():
 				TimeDisplay(self, VideoDecode.getPosition())
@@ -412,8 +403,7 @@ class RightTriTile:
 				[	[ [255, 255, 0, 255], [127, 255, 0, 0] ],
 					[ [255, 255, 0, 255], [127, 255, 0, 0] ] ],
 				np.uint8)
-			glTexImage2Dub(
-				GL_TEXTURE_2D, 0, GL_RGBA, 0, GL_RGBA, texels)
+			glTexImage2Dub(GL_TEXTURE_2D, 0, GL_RGBA, 0, GL_RGBA, texels)
 	
 	def draw(self, aspect):
 		"""
@@ -484,9 +474,7 @@ class RightTriTile:
 		for i in range(len(RightTriTile.hlCornerVerts)):
 			glTexCoordPointerd(RightTriTile.hlCornerTexCoords[i])
 			glVertexPointerd(RightTriTile.hlCornerVerts[i])
-			glDrawArrays(
-				GL_TRIANGLE_FAN, 0,
-				len(RightTriTile.hlCornerVerts[i]))
+			glDrawArrays(GL_TRIANGLE_FAN, 0, len(RightTriTile.hlCornerVerts[i]))
 		glDisable(GL_BLEND)
 		
 		glPopMatrix()
@@ -501,8 +489,7 @@ class TimeDisplay(Actor):
 	def __init__(self, grid, time):
 		Actor.__init__(self, grid)
 		timeStr = "%d:%02d" % (int(time/60), int(time%60))
-		surface = cairo.ImageSurface(
-			cairo.FORMAT_A8, winSize[0], winSize[1])
+		surface = cairo.ImageSurface(cairo.FORMAT_A8, winSize[0], winSize[1])
 		cairoCtx = cairo.Context(surface)
 		pangoCtx = pangocairo.CairoContext(cairoCtx)
 		layout = pangoCtx.create_layout()
@@ -556,8 +543,8 @@ Your time is
 		glEnable(GL_TEXTURE_2D)
 
 if __name__ == '__main__':
-	# Apparently this is necessary to make pygame.time.get_ticks() work;
-	# we can't initialize modules individually.
+	# Apparently this is necessary to make pygame.time.get_ticks() work; we
+	# can't initialize modules individually.
 	pygame.init()
 	pygame.display.set_mode(winSize, pygame.OPENGL|pygame.DOUBLEBUF)
 	pygame.display.set_caption("Escher's Mirror", "Escher's Mirror")
@@ -573,3 +560,5 @@ if __name__ == '__main__':
 	
 	grid = RightTriGrid(2, 3)
 	grid.run()
+
+# vim: set ts=4 sts=4 sw=4 noet :
