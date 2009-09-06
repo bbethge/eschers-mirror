@@ -10,7 +10,6 @@ import cairo
 import pango
 import pangocairo
 import os
-from bidict import bidict
 import numpy as np
 from math import *  # math is delicious
 import random
@@ -119,7 +118,11 @@ class Grid:
 		self.srcVidSize = 1, 1
 		self.deltaT = 0.
 		self.actors = set()
+		self.drawFixedTiles = Signal()
+		self.drawFlyingTiles = Signal()
 		self.drawOverlays = Signal()
+		self.startGrab = Signal()
+		self.endGrab = Signal()
 	
 	def add(self, actor):
 		self.actors.add(actor)
@@ -259,39 +262,24 @@ class RightTriGrid(Grid):
 		Grid.__init__(self)
 		self.cols = cols
 		self.rows = rows
-		self.tiles = bidict()
+		self.tiles = set()
 		import itertools
 		for loc in itertools.product(range(cols), range(rows), range(2)):
-			self.tiles[loc] =  RightTriTile(self, loc)
+			self.tiles.add(RightTriTile(self, loc))
 		self.grabbedTile = None
 		self.shuffle()
 	
 	def draw(self):
-		for tile in self.tiles.itervalues():
-			if tile is not self.grabbedTile:
-				tile.draw(self.vidAspect)
-		if self.grabbedTile is not None:
-			pos = self.getMousePos()
-			if 0. <= pos[0] < self.vidSize[0] and 0. <= pos[1] < self.vidSize[1]:
-				loc = self.findTile(pos)
-				if self.grabbedIdx == loc[2]:
-					self.tiles[loc].drawHighlight(self.vidAspect)
-			self.grabbedTile.draw(self.vidAspect)
+		self.drawFixedTiles.emit(self.vidAspect)
+		self.drawFlyingTiles.emit(self.vidAspect)
 	
-	def swapTiles(self, loc1, loc2):
-		tile1 = self.tiles[loc1]
-		self.tiles[loc1] = self.tiles[loc2]
-		self.tiles[loc2] = tile1
+	#def swapTiles(self, loc1, loc2):
+	#	tile1 = self.tiles[loc1]
+	#	self.tiles[loc1] = self.tiles[loc2]
+	#	self.tiles[loc2] = tile1
 	
 	def grabTile(self, pos):
-		if self.grabbedTile is None:
-			if 0. <= pos[0] < self.vidSize[0] and 0. <= pos[1] < self.vidSize[1]:
-				loc = self.findTile(pos)
-				self.grabbedTile = self.tiles[loc]
-				self.grabOffset = (
-					(loc[0]+0.5)*self.vidSize[0]/self.cols - pos[0],
-					(loc[1]+0.5)*self.vidSize[1]/self.rows - pos[1])
-				self.grabbedIdx = loc[2]
+		self.startGrab.emit(pos)
 	
 	def rotateGrabbed(self, dirxn):
 		if self.grabbedTile is not None:
@@ -313,28 +301,22 @@ class RightTriGrid(Grid):
 		return col, row, idx
 	
 	def releaseTile(self, pos):
-		if self.grabbedTile is None:
-			return
-		if 0. <= pos[0] < self.vidSize[0] and 0. <= pos[1] < self.vidSize[1]:
-			loc = self.findTile(pos)
-			if loc[2] == self.grabbedIdx:
-				self.swapTiles(loc, self.tiles.inv[self.grabbedTile])
-			self.grabbedTile = None
-			if self.isSolved():
-				TimeDisplay(self, VideoDecode.getPosition())
+		self.endGrab.emit(pos)
 	
 	def isSolved(self):
-		for loc, tile in self.tiles.iteritems():
-			if loc != tile.srcLoc:
+		for tile in self.tiles:
+			if tile.srcLoc != tile.dstLoc:
 				return False
 		return True
 	
 	def shuffle(self):
-		locs = self.tiles.keys()
-		for i in range(len(locs)-1):
-			self.swapTiles(locs[i], random.choice(locs[i+1:]))
+		unshuf = list(self.tiles)
+		while len(unshuf) > 1:
+			tile = unshuf.pop()
+			otherTile = random.choice(unshuf)
+			tile.dstLoc, otherTile.dstLoc = otherTile.dstLoc, tile.dstLoc
 
-class RightTriTile:
+class RightTriTile(Actor):
 	verts = np.array(
 		[	[-0.5, -0.5],
 			[ 0.5, -0.5],
@@ -391,10 +373,14 @@ class RightTriTile:
 				[[0., 0.5]] + [[1., 0.5]]*(slices+1),
 				np.double)
 			]
+	speed = 100  # pixels/sec
 	
 	def __init__(self, grid, srcLoc):
-		self.grid = grid
+		Actor.__init__(self, grid)
 		self.srcLoc = srcLoc
+		self.dstLoc = srcLoc
+		self.flying = False
+		self.grabbed = False
 		if RightTriTile.hlTex == 0:
 			RightTriTile.hlTex = glGenTextures(1)
 			glBindTexture(GL_TEXTURE_2D, RightTriTile.hlTex)
@@ -404,6 +390,82 @@ class RightTriTile:
 					[ [255, 255, 0, 255], [127, 255, 0, 0] ] ],
 				np.uint8)
 			glTexImage2Dub(GL_TEXTURE_2D, 0, GL_RGBA, 0, GL_RGBA, texels)
+	
+	def run(self):
+		self.grid.drawFixedTiles.addHandler(self.__class__.draw, self)
+		self.grid.startGrab.addHandler(self.__class__.startGrab, self)
+		while True:
+			while not self.flying:
+				yield
+			while self.grabbed:
+				yield
+			# self.pos is our current position.  self.dstLoc is where we are
+			# going.
+			self.agl = self.dstLoc[2] * 180.  # FIXME
+			targetPos = (
+				(self.dstLoc[0]+0.5)*self.grid.vidSize[0]/self.grid.cols,
+				(self.dstLoc[1]+0.5)*self.grid.vidSize[1]/self.grid.rows)
+			disp = (
+				targetPos[0] - self.pos[0],
+				targetPos[1] - self.pos[1])
+			dist = hypot(*disp)
+			flightTime = dist / self.speed
+			time = 0.
+			while time < flightTime:
+				time += self.grid.deltaT
+				self.pos = (
+					self.pos[0] + disp[0]*self.speed*self.grid.deltaT/dist,
+					self.pos[1] + disp[1]*self.speed*self.grid.deltaT/dist)
+				self.agl += self.grid.deltaT*180/flightTime
+				yield
+			self.flying = False
+			self.grid.drawFlyingTiles.removeHandler(self.__class__.draw, self)
+			self.grid.drawFixedTiles.addHandler(self.__class__.draw, self)
+			del self.agl
+			del self.pos
+		self.grid.startGrab.removeHandler(self.__class__.startGrab, self)
+		self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
+	
+	def startGrab(self, mousePos):
+		localX = float(mousePos[0])*self.grid.cols/self.grid.vidSize[0] - self.dstLoc[0]
+		localY = float(mousePos[1])*self.grid.rows/self.grid.vidSize[1] - self.dstLoc[1]
+		if (
+				0. <= localX < 1. and 0. <= localY < 1.
+				and (localX+localY < 1.) == (self.dstLoc[2] == 0)
+		):
+			self.flying = True
+			self.grabbed = True
+			pos = (
+				(self.dstLoc[0]+0.5)*self.grid.vidSize[0]/self.grid.cols,
+				(self.dstLoc[1]+0.5)*self.grid.vidSize[1]/self.grid.rows)
+			self.mouseOffset = pos[0]-mousePos[0], pos[1]-mousePos[1]
+			self.grid.endGrab.addHandler(self.__class__.endGrab, self)
+			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
+			self.grid.drawFlyingTiles.addHandler(self.__class__.draw, self)
+	
+	def endGrab(self, mousePos):
+		self.grabbed = False
+		self.pos = mousePos[0]+self.mouseOffset[0], mousePos[1]+self.mouseOffset[1]
+		del self.mouseOffset
+		self.grid.endGrab.removeHandler(self.__class__.endGrab, self)
+		targetLoc = self.grid.findTile(mousePos)
+		for tile in self.grid.tiles:
+			if tile.dstLoc == targetLoc:
+				self.swapWith(tile)
+				break
+	
+	def swapWith(self, other):
+		loc = self.dstLoc
+		#self.__setLoc(other.dstLoc)
+		self.dstLoc = other.dstLoc
+		other.__setLoc(loc)
+	
+	def __setLoc(self, loc):
+		self.flying = True
+		self.pos = (
+			self.dstLoc[0]*self.grid.vidSize[0]/self.grid.cols,
+			self.dstLoc[1]*self.grid.vidSize[1]/self.grid.rows)
+		self.dstLoc = loc
 	
 	def draw(self, aspect):
 		"""
@@ -416,20 +478,22 @@ class RightTriTile:
 		srcHeight = float(self.grid.srcVidSize[1])/self.grid.rows
 		srcX = (self.srcLoc[0]+0.5)*srcWidth
 		srcY = (self.srcLoc[1]+0.5)*srcHeight
-		if self.grabbed():
-			mouseX, mouseY = grid.getMousePos()
-			dstX = mouseX + self.grid.grabOffset[0]
-			dstY = mouseY + self.grid.grabOffset[1]
-			dstIdx = self.grid.grabbedIdx
+		if self.flying:
+			if self.grabbed:
+				mouseX, mouseY = self.grid.getMousePos()
+				dstX = mouseX + self.mouseOffset[0]
+				dstY = mouseY + self.mouseOffset[1]
+			else:
+				dstX = self.pos[0]
+				dstY = self.pos[1]
 			glEnable(GL_BLEND)
 			glColor4d(0, 0, 0, 0.8)
 		else:
-			col, row, dstIdx = self.grid.tiles.inv[self]
-			dstX = (col+0.5)*width
-			dstY = (row+0.5)*height
+			dstX = (self.dstLoc[0]+0.5)*width
+			dstY = (self.dstLoc[1]+0.5)*height
 		glPushMatrix()
 		glTranslated(dstX, dstY, 0.)
-		glRotated(180*dstIdx, 0, 0, 1)
+		glRotated(180*self.dstLoc[2], 0, 0, 1)
 		glScaled(width, height, 1.)
 		glMatrixMode(GL_TEXTURE)
 		glPushMatrix()
@@ -446,7 +510,7 @@ class RightTriTile:
 		glPopMatrix()
 		glMatrixMode(GL_MODELVIEW)
 		glPopMatrix()
-		if self == self.grid.grabbedTile:
+		if self.flying:
 			glDisable(GL_BLEND)
 			glColor4d(0, 0, 0, 1)
 	
@@ -480,10 +544,6 @@ class RightTriTile:
 		glPopMatrix()
 		glMatrixMode(GL_MODELVIEW)
 		glPopMatrix()
-	
-	def grabbed(self):
-		"""Is self currently grabbed?"""
-		return self.grid.grabbedTile == self
 
 class TimeDisplay(Actor):
 	def __init__(self, grid, time):
