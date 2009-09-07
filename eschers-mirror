@@ -293,7 +293,7 @@ class RightTriGrid(Grid):
 	
 	def isSolved(self):
 		for tile in self.tiles:
-			if tile.srcLoc != tile.dstLoc:
+			if tile.srcLoc != tile.loc:
 				return False
 		return True
 	
@@ -302,7 +302,7 @@ class RightTriGrid(Grid):
 		while len(unshuf) > 1:
 			tile = unshuf.pop()
 			otherTile = random.choice(unshuf)
-			tile.dstLoc, otherTile.dstLoc = otherTile.dstLoc, tile.dstLoc
+			tile.loc, otherTile.loc = otherTile.loc, tile.loc
 
 class RightTriTile(Actor):
 	verts = np.array(
@@ -363,10 +363,10 @@ class RightTriTile(Actor):
 			]
 	speed = 500  # pixels/sec
 	
-	def __init__(self, grid, srcLoc):
+	def __init__(self, grid, loc):
 		Actor.__init__(self, grid)
-		self.srcLoc = srcLoc
-		self.dstLoc = srcLoc
+		self.srcLoc = loc
+		self.loc = loc
 		if RightTriTile.hlTex == 0:
 			RightTriTile.hlTex = glGenTextures(1)
 			glBindTexture(GL_TEXTURE_2D, RightTriTile.hlTex)
@@ -391,14 +391,14 @@ class RightTriTile(Actor):
 				self.endFlying()
 	
 	def startGrab(self, mousePos):
-		localX = float(mousePos[0])*self.grid.cols/self.grid.vidSize[0] - self.dstLoc[0]
-		localY = float(mousePos[1])*self.grid.rows/self.grid.vidSize[1] - self.dstLoc[1]
+		localX = float(mousePos[0])*self.grid.cols/self.grid.vidSize[0] - self.loc[0]
+		localY = float(mousePos[1])*self.grid.rows/self.grid.vidSize[1] - self.loc[1]
 		if (
 				0. <= localX < 1. and 0. <= localY < 1.
-				and (localX+localY < 1.) == (self.dstLoc[2] == 0)
+				and (localX+localY < 1.) == (self.loc[2] == 0)
 		):
 			self.state = 'grabbed'
-			pos = self.locToPos(self.dstLoc)
+			pos = self.locToPos(self.loc)
 			self.mouseOffset = pos[0]-mousePos[0], pos[1]-mousePos[1]
 			self.grid.endGrab.addHandler(self.__class__.endGrab, self)
 			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
@@ -409,24 +409,24 @@ class RightTriTile(Actor):
 		self.grid.endGrab.removeHandler(self.__class__.endGrab, self)
 		targetLoc = self.grid.findTile(mousePos)
 		for tile in self.grid.tiles:
-			if tile.dstLoc == targetLoc:
+			if tile.loc == targetLoc:
 				self.swapWith(tile)
 				curPos = (
 					mousePos[0]+self.mouseOffset[0],
 					mousePos[1]+self.mouseOffset[1])
-				self.startFlying(curPos, self.locToPos(self.dstLoc))
+				self.startFlying(curPos, self.locToPos(self.loc))
 				break
 		del self.mouseOffset
 	
 	def swapWith(self, other):
-		loc = self.dstLoc
-		#self.__setLoc(other.dstLoc)
-		self.dstLoc = other.dstLoc
+		loc = self.loc
+		#self.__setLoc(other.loc)
+		self.loc = other.loc
 		other.__setLoc(loc)
 	
 	def __setLoc(self, loc):
-		self.startFlying(self.locToPos(self.dstLoc), self.locToPos(loc))
-		self.dstLoc = loc
+		self.startFlying(self.locToPos(self.loc), self.locToPos(loc))
+		self.loc = loc
 	
 	def startFlying(self, startPos, endPos):
 		self.pos = startPos
@@ -479,11 +479,11 @@ class RightTriTile(Actor):
 			glEnable(GL_BLEND)
 			glColor4d(0, 0, 0, 0.8)
 		else:
-			dstX = (self.dstLoc[0]+0.5)*width
-			dstY = (self.dstLoc[1]+0.5)*height
+			dstX = (self.loc[0]+0.5)*width
+			dstY = (self.loc[1]+0.5)*height
 		glPushMatrix()
 		glTranslated(dstX, dstY, 0.)
-		glRotated(180*self.dstLoc[2], 0, 0, 1)
+		glRotated(180*self.loc[2], 0, 0, 1)
 		glScaled(width, height, 1.)
 		glMatrixMode(GL_TEXTURE)
 		glPushMatrix()
