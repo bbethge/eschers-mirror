@@ -70,27 +70,17 @@ class Actor:
 		"""
 		self.grid = grid
 		grid.add(self)
-		self.runIter = self.run()
 	
-	def update(self):
+	def update(self, deltaT):
 		"""
 		This is called by the grid before every frame so the object can update
 		its state.
-		"""
-		try:
-			self.runIter.next()
-		except StopIteration:
-			self.grid.remove(self)
-	
-	def run(self):
-		"""
-		This should be a generator.  It should yield every time it has finished 
-		updating itself for a particular frame.  The yield will return when it 
-		is time to prepare for the next frame.  The time since the previous
-		frame can be found in self.grid.deltaT.  When this generator quits, the 
-		object is destroyed.
+		deltaT: time in seconds since last update
 		"""
 		pass
+	
+	def die(self):
+		self.grid.remove(self)
 
 class Grid:
 	"""
@@ -130,12 +120,6 @@ class Grid:
 	def remove(self, actor):
 		self.actors.remove(actor)
 	
-	def updateActors(self):
-		# Actors may remove themselves during the update, so we must iterate 
-		# over a copy of self.actors
-		for actor in set(self.actors):
-			actor.update()
-	
 	def run(self):
 		"""
 		Run the main event loop for the puzzle.  This will not return until the 
@@ -146,9 +130,13 @@ class Grid:
 		done = False
 		while not done and VideoDecode.isPlaying():
 			timeMs = pygame.time.get_ticks()
-			self.deltaT = (timeMs - oldTimeMs) / 1000.
+			deltaT = (timeMs - oldTimeMs) / 1000.
 			oldTimeMs = timeMs
-			self.updateActors()
+			# Actors may remove themselves during the update, so we must iterate 
+			# over a copy of self.actors.  FIXME: what if actors remove other
+			# actors?
+			for actor in set(self.actors):
+				actor.update(deltaT)
 			width, height, aspect, data = VideoDecode.getFrame(50)
 			if width != None:
 				self.handleFrame((width,height), aspect, data)
@@ -373,14 +361,12 @@ class RightTriTile(Actor):
 				[[0., 0.5]] + [[1., 0.5]]*(slices+1),
 				np.double)
 			]
-	speed = 100  # pixels/sec
+	speed = 500  # pixels/sec
 	
 	def __init__(self, grid, srcLoc):
 		Actor.__init__(self, grid)
 		self.srcLoc = srcLoc
 		self.dstLoc = srcLoc
-		self.flying = False
-		self.grabbed = False
 		if RightTriTile.hlTex == 0:
 			RightTriTile.hlTex = glGenTextures(1)
 			glBindTexture(GL_TEXTURE_2D, RightTriTile.hlTex)
@@ -390,41 +376,19 @@ class RightTriTile(Actor):
 					[ [255, 255, 0, 255], [127, 255, 0, 0] ] ],
 				np.uint8)
 			glTexImage2Dub(GL_TEXTURE_2D, 0, GL_RGBA, 0, GL_RGBA, texels)
-	
-	def run(self):
 		self.grid.drawFixedTiles.addHandler(self.__class__.draw, self)
 		self.grid.startGrab.addHandler(self.__class__.startGrab, self)
-		while True:
-			while not self.flying:
-				yield
-			while self.grabbed:
-				yield
-			# self.pos is our current position.  self.dstLoc is where we are
-			# going.
-			self.agl = self.dstLoc[2] * 180.  # FIXME
-			targetPos = (
-				(self.dstLoc[0]+0.5)*self.grid.vidSize[0]/self.grid.cols,
-				(self.dstLoc[1]+0.5)*self.grid.vidSize[1]/self.grid.rows)
-			disp = (
-				targetPos[0] - self.pos[0],
-				targetPos[1] - self.pos[1])
-			dist = hypot(*disp)
-			flightTime = dist / self.speed
-			time = 0.
-			while time < flightTime:
-				time += self.grid.deltaT
+		self.state = 'sitting'
+	
+	def update(self, deltaT):
+		if self.state == 'flying':
+			if self.flightTime < self.totFlightTime:
+				self.flightTime += deltaT
 				self.pos = (
-					self.pos[0] + disp[0]*self.speed*self.grid.deltaT/dist,
-					self.pos[1] + disp[1]*self.speed*self.grid.deltaT/dist)
-				self.agl += self.grid.deltaT*180/flightTime
-				yield
-			self.flying = False
-			self.grid.drawFlyingTiles.removeHandler(self.__class__.draw, self)
-			self.grid.drawFixedTiles.addHandler(self.__class__.draw, self)
-			del self.agl
-			del self.pos
-		self.grid.startGrab.removeHandler(self.__class__.startGrab, self)
-		self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
+					self.pos[0] + self.flyingDir[0]*self.speed*deltaT,
+					self.pos[1] + self.flyingDir[1]*self.speed*deltaT)
+			else:
+				self.endFlying()
 	
 	def startGrab(self, mousePos):
 		localX = float(mousePos[0])*self.grid.cols/self.grid.vidSize[0] - self.dstLoc[0]
@@ -433,26 +397,26 @@ class RightTriTile(Actor):
 				0. <= localX < 1. and 0. <= localY < 1.
 				and (localX+localY < 1.) == (self.dstLoc[2] == 0)
 		):
-			self.flying = True
-			self.grabbed = True
-			pos = (
-				(self.dstLoc[0]+0.5)*self.grid.vidSize[0]/self.grid.cols,
-				(self.dstLoc[1]+0.5)*self.grid.vidSize[1]/self.grid.rows)
+			self.state = 'grabbed'
+			pos = self.locToPos(self.dstLoc)
 			self.mouseOffset = pos[0]-mousePos[0], pos[1]-mousePos[1]
 			self.grid.endGrab.addHandler(self.__class__.endGrab, self)
 			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
 			self.grid.drawFlyingTiles.addHandler(self.__class__.draw, self)
 	
 	def endGrab(self, mousePos):
-		self.grabbed = False
-		self.pos = mousePos[0]+self.mouseOffset[0], mousePos[1]+self.mouseOffset[1]
-		del self.mouseOffset
+		self.state = 'flying'
 		self.grid.endGrab.removeHandler(self.__class__.endGrab, self)
 		targetLoc = self.grid.findTile(mousePos)
 		for tile in self.grid.tiles:
 			if tile.dstLoc == targetLoc:
 				self.swapWith(tile)
+				curPos = (
+					mousePos[0]+self.mouseOffset[0],
+					mousePos[1]+self.mouseOffset[1])
+				self.startFlying(curPos, self.locToPos(self.dstLoc))
 				break
+		del self.mouseOffset
 	
 	def swapWith(self, other):
 		loc = self.dstLoc
@@ -461,11 +425,37 @@ class RightTriTile(Actor):
 		other.__setLoc(loc)
 	
 	def __setLoc(self, loc):
-		self.flying = True
-		self.pos = (
-			self.dstLoc[0]*self.grid.vidSize[0]/self.grid.cols,
-			self.dstLoc[1]*self.grid.vidSize[1]/self.grid.rows)
+		self.startFlying(self.locToPos(self.dstLoc), self.locToPos(loc))
 		self.dstLoc = loc
+	
+	def startFlying(self, startPos, endPos):
+		self.pos = startPos
+		self.targetPos = endPos
+		self.flyingDir = (
+			self.targetPos[0] - self.pos[0], self.targetPos[1] - self.pos[1])
+		dist = hypot(*self.flyingDir)
+		self.flyingDir = self.flyingDir[0]/dist, self.flyingDir[1]/dist
+		self.totFlightTime = dist / self.speed
+		self.flightTime = 0.
+		if self.state == 'sitting':
+			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
+			self.grid.drawFlyingTiles.addHandler(self.__class__.draw, self)
+		self.state = 'flying'
+	
+	def endFlying(self):
+		self.state = 'sitting'
+		self.grid.drawFlyingTiles.removeHandler(self.__class__.draw, self)
+		self.grid.drawFixedTiles.addHandler(self.__class__.draw, self)
+		del self.flightTime
+		del self.totFlightTime
+		del self.flyingDir
+		del self.targetPos
+		del self.pos
+	
+	def locToPos(self, loc):
+		return (
+			(loc[0]+0.5) * self.grid.vidSize[0] / self.grid.cols,
+			(loc[1]+0.5) * self.grid.vidSize[1] / self.grid.rows)
 	
 	def draw(self, aspect):
 		"""
@@ -478,8 +468,8 @@ class RightTriTile(Actor):
 		srcHeight = float(self.grid.srcVidSize[1])/self.grid.rows
 		srcX = (self.srcLoc[0]+0.5)*srcWidth
 		srcY = (self.srcLoc[1]+0.5)*srcHeight
-		if self.flying:
-			if self.grabbed:
+		if self.state in [ 'flying', 'grabbed' ]:
+			if self.state == 'grabbed':
 				mouseX, mouseY = self.grid.getMousePos()
 				dstX = mouseX + self.mouseOffset[0]
 				dstY = mouseY + self.mouseOffset[1]
@@ -510,7 +500,7 @@ class RightTriTile(Actor):
 		glPopMatrix()
 		glMatrixMode(GL_MODELVIEW)
 		glPopMatrix()
-		if self.flying:
+		if self.state in [ 'flying', 'grabbed' ]:
 			glDisable(GL_BLEND)
 			glColor4d(0, 0, 0, 1)
 	
