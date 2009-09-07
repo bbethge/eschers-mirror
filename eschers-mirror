@@ -384,9 +384,7 @@ class RightTriTile(Actor):
 		if self.state == 'flying':
 			if self.flightTime < self.totFlightTime:
 				self.flightTime += deltaT
-				self.pos = (
-					self.pos[0] + self.flyingDir[0]*self.speed*deltaT,
-					self.pos[1] + self.flyingDir[1]*self.speed*deltaT)
+				self.pos += self.flyingDir * (self.speed*deltaT)
 			else:
 				self.endFlying()
 	
@@ -399,7 +397,7 @@ class RightTriTile(Actor):
 		):
 			self.state = 'grabbed'
 			pos = self.locToPos(self.loc)
-			self.mouseOffset = pos[0]-mousePos[0], pos[1]-mousePos[1]
+			self.mouseOffset = pos - mousePos
 			self.grid.endGrab.addHandler(self.__class__.endGrab, self)
 			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
 			self.grid.drawFlyingTiles.addHandler(self.__class__.draw, self)
@@ -411,9 +409,7 @@ class RightTriTile(Actor):
 		for tile in self.grid.tiles:
 			if tile.loc == targetLoc:
 				self.swapWith(tile)
-				curPos = (
-					mousePos[0]+self.mouseOffset[0],
-					mousePos[1]+self.mouseOffset[1])
+				curPos = self.mouseOffset + mousePos
 				self.startFlying(curPos, self.locToPos(self.loc))
 				break
 		del self.mouseOffset
@@ -431,10 +427,9 @@ class RightTriTile(Actor):
 	def startFlying(self, startPos, endPos):
 		self.pos = startPos
 		self.targetPos = endPos
-		self.flyingDir = (
-			self.targetPos[0] - self.pos[0], self.targetPos[1] - self.pos[1])
-		dist = hypot(*self.flyingDir)
-		self.flyingDir = self.flyingDir[0]/dist, self.flyingDir[1]/dist
+		displacement = self.targetPos - self.pos
+		dist = np.linalg.norm(displacement)
+		self.flyingDir = displacement / dist
 		self.totFlightTime = dist / self.speed
 		self.flightTime = 0.
 		if self.state == 'sitting':
@@ -453,9 +448,10 @@ class RightTriTile(Actor):
 		del self.pos
 	
 	def locToPos(self, loc):
-		return (
-			(loc[0]+0.5) * self.grid.vidSize[0] / self.grid.cols,
-			(loc[1]+0.5) * self.grid.vidSize[1] / self.grid.rows)
+		return np.array(
+			[ (loc[0]+0.5) * self.grid.vidSize[0] / self.grid.cols,
+			  (loc[1]+0.5) * self.grid.vidSize[1] / self.grid.rows ],
+			np.double)
 	
 	def draw(self, aspect):
 		"""
