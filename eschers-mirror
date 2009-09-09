@@ -361,7 +361,12 @@ class RightTriTile(Actor):
 				[[0., 0.5]] + [[1., 0.5]]*(slices+1),
 				np.double)
 			]
-	speed = 500  # pixels/sec
+	totFlightTime = 1
+	
+	class Pose:
+		def __init__(self, pos, angle):
+			self.pos = pos
+			self.angle = angle
 	
 	def __init__(self, grid, loc):
 		Actor.__init__(self, grid)
@@ -382,9 +387,10 @@ class RightTriTile(Actor):
 	
 	def update(self, deltaT):
 		if self.state == 'flying':
+			self.flightTime += deltaT
 			if self.flightTime < self.totFlightTime:
-				self.flightTime += deltaT
-				self.pos += self.flyingDir * (self.speed*deltaT)
+				self.pose.pos += self.flyingVel.pos * deltaT
+				self.pose.angle += self.flyingVel.angle * deltaT
 			else:
 				self.endFlying()
 	
@@ -396,8 +402,8 @@ class RightTriTile(Actor):
 				and (localX+localY < 1.) == (self.loc[2] == 0)
 		):
 			self.state = 'grabbed'
-			pos = self.locToPos(self.loc)
-			self.mouseOffset = pos - mousePos
+			pose = self.locToPos(self.loc)
+			self.mouseOffset = pose.pos - mousePos
 			self.grid.endGrab.addHandler(self.__class__.endGrab, self)
 			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
 			self.grid.drawFlyingTiles.addHandler(self.__class__.draw, self)
@@ -410,7 +416,7 @@ class RightTriTile(Actor):
 			if tile.loc == targetLoc:
 				self.swapWith(tile)
 				curPos = self.mouseOffset + mousePos
-				self.startFlying(curPos, self.locToPos(self.loc))
+				self.startFlying(self.Pose(curPos, 180*self.loc[2]), self.locToPos(self.loc))
 				break
 		del self.mouseOffset
 	
@@ -424,13 +430,12 @@ class RightTriTile(Actor):
 		self.startFlying(self.locToPos(self.loc), self.locToPos(loc))
 		self.loc = loc
 	
-	def startFlying(self, startPos, endPos):
-		self.pos = startPos
-		self.targetPos = endPos
-		displacement = self.targetPos - self.pos
-		dist = np.linalg.norm(displacement)
-		self.flyingDir = displacement / dist
-		self.totFlightTime = dist / self.speed
+	def startFlying(self, startPose, endPose):
+		self.pose = startPose
+		self.targetPose = endPose
+		self.flyingVel = self.Pose(
+			(self.targetPose.pos-self.pose.pos) / self.totFlightTime,
+			self.targetPose.angle - self.pose.angle)
 		self.flightTime = 0.
 		if self.state == 'sitting':
 			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
@@ -442,16 +447,17 @@ class RightTriTile(Actor):
 		self.grid.drawFlyingTiles.removeHandler(self.__class__.draw, self)
 		self.grid.drawFixedTiles.addHandler(self.__class__.draw, self)
 		del self.flightTime
-		del self.totFlightTime
-		del self.flyingDir
-		del self.targetPos
-		del self.pos
+		del self.flyingVel
+		del self.targetPose
+		del self.pose
 	
 	def locToPos(self, loc):
-		return np.array(
-			[ (loc[0]+0.5) * self.grid.vidSize[0] / self.grid.cols,
-			  (loc[1]+0.5) * self.grid.vidSize[1] / self.grid.rows ],
-			np.double)
+		return self.Pose(
+			np.array(
+				[ (loc[0]+0.5) * self.grid.vidSize[0] / self.grid.cols,
+				  (loc[1]+0.5) * self.grid.vidSize[1] / self.grid.rows ],
+				np.double),
+			loc[2] * 180)
 	
 	def draw(self, aspect):
 		"""
@@ -469,17 +475,20 @@ class RightTriTile(Actor):
 				mouseX, mouseY = self.grid.getMousePos()
 				dstX = mouseX + self.mouseOffset[0]
 				dstY = mouseY + self.mouseOffset[1]
+				dstAgl = 180*self.loc[2]
 			else:
-				dstX = self.pos[0]
-				dstY = self.pos[1]
+				dstX = self.pose.pos[0]
+				dstY = self.pose.pos[1]
+				dstAgl = self.pose.angle
 			glEnable(GL_BLEND)
 			glColor4d(0, 0, 0, 0.8)
 		else:
 			dstX = (self.loc[0]+0.5)*width
 			dstY = (self.loc[1]+0.5)*height
+			dstAgl = 180*self.loc[2]
 		glPushMatrix()
 		glTranslated(dstX, dstY, 0.)
-		glRotated(180*self.loc[2], 0, 0, 1)
+		glRotated(dstAgl, 0, 0, 1)
 		glScaled(width, height, 1.)
 		glMatrixMode(GL_TEXTURE)
 		glPushMatrix()
