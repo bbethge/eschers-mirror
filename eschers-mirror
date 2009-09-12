@@ -113,6 +113,7 @@ class Grid:
 		self.drawOverlays = Signal()
 		self.startGrab = Signal()
 		self.endGrab = Signal()
+		self.rotateTile = Signal()
 	
 	def add(self, actor):
 		self.actors.add(actor)
@@ -137,7 +138,7 @@ class Grid:
 			# actors?
 			for actor in set(self.actors):
 				actor.update(deltaT)
-			width, height, aspect, data = VideoDecode.getFrame(50)
+			width, height, aspect, data = VideoDecode.getFrame(20)
 			if width != None:
 				self.handleFrame((width,height), aspect, data)
 			while True:
@@ -170,13 +171,16 @@ class Grid:
 			if event.button == 1: # left?
 				self.grabTile(self.transformMousePos(*event.pos))
 			elif event.button == 2: # right?
-				self.rotateGrabbed(1)
+				self.rotateTile.emit(1)
 		elif event.type == MOUSEBUTTONUP:
 			if event.button == 1:
 				self.releaseTile(self.transformMousePos(*event.pos))
 		elif event.type == KEYDOWN:
 			if event.key == K_r:
-				self.rotateGrabbed(1)
+				if event.mod & KMOD_SHIFT:
+					self.rotateTile.emit(-1)
+				else:
+					self.rotateTile.emit(1)
 	
 	def handleSizeChange(self, width, height, aspect):
 		if aspect >= float(winSize[0])/winSize[1]:
@@ -361,7 +365,7 @@ class RightTriTile(Actor):
 				[[0., 0.5]] + [[1., 0.5]]*(slices+1),
 				np.double)
 			]
-	totFlightTime = 1
+	totFlightTime = 0.1
 	
 	class Pose:
 		def __init__(self, pos, angle):
@@ -402,23 +406,35 @@ class RightTriTile(Actor):
 				and (localX+localY < 1.) == (self.loc[2] == 0)
 		):
 			self.state = 'grabbed'
-			pose = self.locToPos(self.loc)
+			pose = self.locToPose(self.loc)
 			self.mouseOffset = pose.pos - mousePos
+			self.grabbedIdx = self.loc[2]
 			self.grid.endGrab.addHandler(self.__class__.endGrab, self)
+			self.grid.rotateTile.addHandler(self.__class__.rotate, self)
 			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
 			self.grid.drawFlyingTiles.addHandler(self.__class__.draw, self)
 	
 	def endGrab(self, mousePos):
 		self.state = 'flying'
+		self.grid.rotateTile.removeHandler(self.__class__.rotate, self)
 		self.grid.endGrab.removeHandler(self.__class__.endGrab, self)
 		targetLoc = self.grid.findTile(mousePos)
-		for tile in self.grid.tiles:
-			if tile.loc == targetLoc:
-				self.swapWith(tile)
-				curPos = self.mouseOffset + mousePos
-				self.startFlying(self.Pose(curPos, 180*self.loc[2]), self.locToPos(self.loc))
-				break
+		if targetLoc[2] == self.grabbedIdx:
+			for tile in self.grid.tiles:
+				if tile.loc == targetLoc:
+					self.swapWith(tile)
+					break
+			else:
+				raise RuntimeError("Couln't find tile at "+str(targetLoc))
+		curPos = self.mouseOffset + mousePos
+		self.startFlying(
+			self.Pose(curPos, 180*self.grabbedIdx), self.locToPose(self.loc))
+		del self.grabbedIdx
 		del self.mouseOffset
+	
+	def rotate(self, dirxn):
+		self.grabbedIdx = (self.grabbedIdx+dirxn) % 2
+		self.mouseOffset = -self.mouseOffset
 	
 	def swapWith(self, other):
 		loc = self.loc
@@ -427,7 +443,7 @@ class RightTriTile(Actor):
 		other.__setLoc(loc)
 	
 	def __setLoc(self, loc):
-		self.startFlying(self.locToPos(self.loc), self.locToPos(loc))
+		self.startFlying(self.locToPose(self.loc), self.locToPose(loc))
 		self.loc = loc
 	
 	def startFlying(self, startPose, endPose):
@@ -451,7 +467,7 @@ class RightTriTile(Actor):
 		del self.targetPose
 		del self.pose
 	
-	def locToPos(self, loc):
+	def locToPose(self, loc):
 		return self.Pose(
 			np.array(
 				[ (loc[0]+0.5) * self.grid.vidSize[0] / self.grid.cols,
@@ -475,7 +491,7 @@ class RightTriTile(Actor):
 				mouseX, mouseY = self.grid.getMousePos()
 				dstX = mouseX + self.mouseOffset[0]
 				dstY = mouseY + self.mouseOffset[1]
-				dstAgl = 180*self.loc[2]
+				dstAgl = 180*self.grabbedIdx
 			else:
 				dstX = self.pose.pos[0]
 				dstY = self.pose.pos[1]
