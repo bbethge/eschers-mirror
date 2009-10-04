@@ -170,7 +170,7 @@ class Grid:
 		if event.type == MOUSEBUTTONDOWN:
 			if event.button == 1: # left?
 				self.grabTile(self.transformMousePos(*event.pos))
-			elif event.button == 2: # right?
+			elif event.button == 3: # right?
 				self.rotateTile.emit(1)
 		elif event.type == MOUSEBUTTONUP:
 			if event.button == 1:
@@ -294,6 +294,8 @@ class RightTriGrid(Grid):
 	
 	def releaseTile(self, pos):
 		self.endGrab.emit(pos)
+		if self.isSolved():
+			TimeDisplay(self, VideoDecode.getPosition())
 	
 	def isSolved(self):
 		for tile in self.tiles:
@@ -449,6 +451,8 @@ class RightTriTile(Actor):
 	def startFlying(self, startPose, endPose):
 		self.pose = startPose
 		self.targetPose = endPose
+		# Awkwardly, flyingVel is a Pose object even though it is more like the
+		# time derivative of a pose.
 		self.flyingVel = self.Pose(
 			(self.targetPose.pos-self.pose.pos) / self.totFlightTime,
 			self.targetPose.angle - self.pose.angle)
@@ -582,18 +586,23 @@ Your time is
 			(self.grid.vidSize[0] - self.size[0])/2.,
 			(self.grid.vidSize[1] - self.size[1])/2.]
 	
-	def run(self):
 		self.grid.drawOverlays.addHandler(self.__class__.draw, self)
-		time = 0.
-		while time < 3.:
-			time += self.grid.deltaT
-			yield
-		vel = 0.
-		while self.pos[1]+self.size[1] > -self.grid.vidOrigin[1]:
-			self.pos[1] += vel * self.grid.deltaT
-			vel += -1500 * self.grid.deltaT
-			yield
-		self.grid.drawOverlays.removeHandler(self.__class__.draw, self)
+		self.time = 0.
+		self.state = 'sitting'
+	
+	def update(self, deltaT):
+		if self.state == 'sitting':
+			if self.time < 3.:
+				self.time += deltaT
+			else:
+				self.state = 'falling'
+				self.time = 0.
+		elif self.state == 'falling':
+			if self.pos[1]+self.size[1] > -self.grid.vidOrigin[1]:
+				self.time += deltaT
+				self.pos[1] += -1500 * self.time * deltaT
+			else:
+				self.die()
 	
 	def draw(self):
 		glDisable(GL_TEXTURE_2D)
