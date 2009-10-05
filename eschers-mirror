@@ -130,14 +130,6 @@ class Grid:
 		oldTimeMs = pygame.time.get_ticks()
 		done = False
 		while not done and VideoDecode.isPlaying():
-			timeMs = pygame.time.get_ticks()
-			deltaT = (timeMs - oldTimeMs) / 1000.
-			oldTimeMs = timeMs
-			# Actors may remove themselves during the update, so we must iterate 
-			# over a copy of self.actors.  FIXME: what if actors remove other
-			# actors?
-			for actor in set(self.actors):
-				actor.update(deltaT)
 			width, height, aspect, data = VideoDecode.getFrame(20)
 			if width != None:
 				self.handleFrame((width,height), aspect, data)
@@ -149,6 +141,14 @@ class Grid:
 					done = True
 					break
 				self.handleEvent(event)
+			timeMs = pygame.time.get_ticks()
+			deltaT = (timeMs - oldTimeMs) / 1000.
+			oldTimeMs = timeMs
+			# Actors may remove themselves during the update, so we must iterate 
+			# over a copy of self.actors.  FIXME: what if actors remove other
+			# actors?
+			for actor in set(self.actors):
+				actor.update(deltaT)
 			glClear(GL_COLOR_BUFFER_BIT)
 			# What happens if there is no current texture image attached to
 			# self.vidTex because we haven't received a frame yet?
@@ -316,6 +316,7 @@ class RightTriTile(Actor):
 			[ 0.5, -0.5],
 			[-0.5,  0.5] ],
 		np.double)
+	motionBlurSteps = 10
 	hlWidth = 0.1
 	hlTex = 0
 	hlSideVerts = np.empty((len(verts)*4,2), np.double)
@@ -370,9 +371,13 @@ class RightTriTile(Actor):
 	totFlightTime = 0.1
 	
 	class Pose:
-		def __init__(self, pos, angle):
-			self.pos = pos
-			self.angle = angle
+		def __init__(self, *args):
+			if len(args) == 1:
+				self.pos = np.array(args[0].pos)
+				self.angle = args[0].angle
+			else:
+				self.pos = np.array(args[0])
+				self.angle = args[1]
 	
 	def __init__(self, grid, loc):
 		Actor.__init__(self, grid)
@@ -394,9 +399,10 @@ class RightTriTile(Actor):
 	def update(self, deltaT):
 		if self.state == 'flying':
 			self.flightTime += deltaT
+			self.pose = self.Pose(self.nextPose)
 			if self.flightTime < self.totFlightTime:
-				self.pose.pos += self.flyingVel.pos * deltaT
-				self.pose.angle += self.flyingVel.angle * deltaT
+				self.nextPose.pos += self.flyingVel.pos * deltaT
+				self.nextPose.angle += self.flyingVel.angle * deltaT
 			else:
 				self.endFlying()
 	
@@ -449,13 +455,13 @@ class RightTriTile(Actor):
 		self.loc = loc
 	
 	def startFlying(self, startPose, endPose):
-		self.pose = startPose
-		self.targetPose = endPose
+		self.pose = self.Pose(np.empty(2), 0)  # This value shouldn't actually be used
+		self.nextPose = self.Pose(startPose)
 		# Awkwardly, flyingVel is a Pose object even though it is more like the
 		# time derivative of a pose.
 		self.flyingVel = self.Pose(
-			(self.targetPose.pos-self.pose.pos) / self.totFlightTime,
-			self.targetPose.angle - self.pose.angle)
+			(endPose.pos-self.nextPose.pos) / self.totFlightTime,
+			(endPose.angle-self.nextPose.angle) / self.totFlightTime)
 		self.flightTime = 0.
 		if self.state == 'sitting':
 			self.grid.drawFixedTiles.removeHandler(self.__class__.draw, self)
@@ -468,7 +474,7 @@ class RightTriTile(Actor):
 		self.grid.drawFixedTiles.addHandler(self.__class__.draw, self)
 		del self.flightTime
 		del self.flyingVel
-		del self.targetPose
+		del self.nextPose
 		del self.pose
 	
 	def locToPose(self, loc):
@@ -490,44 +496,53 @@ class RightTriTile(Actor):
 		srcHeight = float(self.grid.srcVidSize[1])/self.grid.rows
 		srcX = (self.srcLoc[0]+0.5)*srcWidth
 		srcY = (self.srcLoc[1]+0.5)*srcHeight
-		if self.state in [ 'flying', 'grabbed' ]:
-			if self.state == 'grabbed':
-				mouseX, mouseY = self.grid.getMousePos()
-				dstX = mouseX + self.mouseOffset[0]
-				dstY = mouseY + self.mouseOffset[1]
-				dstAgl = 180*self.grabbedIdx
-			else:
-				dstX = self.pose.pos[0]
-				dstY = self.pose.pos[1]
-				dstAgl = self.pose.angle
-			glEnable(GL_BLEND)
-			glColor4d(0, 0, 0, 0.8)
-		else:
-			dstX = (self.loc[0]+0.5)*width
-			dstY = (self.loc[1]+0.5)*height
-			dstAgl = 180*self.loc[2]
-		glPushMatrix()
-		glTranslated(dstX, dstY, 0.)
-		glRotated(dstAgl, 0, 0, 1)
-		glScaled(width, height, 1.)
 		glMatrixMode(GL_TEXTURE)
 		glPushMatrix()
 		glTranslated(srcX, srcY, 0.)
 		glRotated(180*self.srcLoc[2], 0, 0, 1)
 		glScaled(srcWidth, srcHeight, 1.)
-		
+		glMatrixMode(GL_MODELVIEW)
 		glBindTexture(GL_TEXTURE_2D, self.grid.vidTex)
 		glTexCoordPointerd(RightTriTile.verts)
 		glVertexPointerd(RightTriTile.verts)
 		
-		glDrawArrays(GL_TRIANGLES, 0, 3)
+		def simpleDraw(x, y, angle):
+			glPushMatrix()
+			glTranslated(x, y, 0.)
+			glRotated(angle, 0, 0, 1)
+			glScaled(width, height, 1.)
 		
-		glPopMatrix()
-		glMatrixMode(GL_MODELVIEW)
-		glPopMatrix()
+			glDrawArrays(GL_TRIANGLES, 0, 3)
+		
+			glPopMatrix()
+		
 		if self.state in [ 'flying', 'grabbed' ]:
+			glEnable(GL_BLEND)
+			if self.state == 'grabbed':
+				glColor4d(0, 0, 0, 0.8)
+				mouseX, mouseY = self.grid.getMousePos()
+				simpleDraw(
+					mouseX + self.mouseOffset[0], mouseY + self.mouseOffset[1],
+					180*self.grabbedIdx)
+			else:
+				glColor4d(0, 0, 0, 0.8/self.motionBlurSteps)
+				deltaX, deltaY = self.nextPose.pos - self.pose.pos
+				deltaAngle = self.nextPose.angle - self.pose.angle
+				for n in range(self.motionBlurSteps):
+					simpleDraw(
+						self.pose.pos[0] + n*deltaX/self.motionBlurSteps,
+						self.pose.pos[1] + n*deltaY/self.motionBlurSteps,
+						self.pose.angle + n*deltaAngle/self.motionBlurSteps)
 			glDisable(GL_BLEND)
 			glColor4d(0, 0, 0, 1)
+		else:
+			simpleDraw(
+				(self.loc[0]+0.5)*width, (self.loc[1]+0.5)*height,
+				180*self.loc[2])
+		
+		glMatrixMode(GL_TEXTURE)
+		glPopMatrix()
+		glMatrixMode(GL_MODELVIEW)
 	
 	def drawHighlight(self, aspect):
 		width = float(self.grid.vidSize[0])/self.grid.cols
