@@ -31,7 +31,6 @@ class Signal:
 	"""
 	def __init__(self):
 		self.callbacks = set()
-		self.methodCallbacks = weakref.WeakValueDictionary()
 	
 	def addHandler(self, handler, obj=None):
 		"""
@@ -44,22 +43,30 @@ class Signal:
 		removed.  Passing the object and the method separately allows the
 		handler to be automatically removed when the object is no longer needed.
 		"""
-		if obj == None:
-			self.callbacks.add(handler)
+		if obj is None:
+			self.callbacks.add( (handler,None) )
 		else:
-			self.methodCallbacks[handler,weakref.ref(obj)] = obj
+			self.callbacks.add( (handler,weakref.ref(obj)) )
 	
 	def removeHandler(self, handler, obj=None):
-		if obj == None:
-			self.callbacks.remove(handler)
+		if obj is None:
+			self.callbacks.remove( (handler,None) )
 		else:
-			del self.methodCallbacks[handler,weakref.ref(obj)]
+			# The weakref we stored previously must still be valid, becase the
+			# object is still referenced through obj.
+			self.callbacks.remove( (handler,weakref.ref(obj)) )
 	
 	def emit(self, *args, **kwargs):
-		for cb in self.callbacks:
-			cb(*args, **kwargs)
-		for cb, objRef in self.methodCallbacks.keys():
-			cb(objRef(), *args, **kwargs)
+		# Iterate over a copy of self.callbacks since we will be removing any
+		# method callbacks to dead objects as we go.
+		for handler, ref in set(self.callbacks):
+			if ref is None:
+				handler(*args, **kwargs)
+			obj = ref()
+			if obj is None:
+				self.callbacks.remove( (handler,ref) )
+			else:
+				handler(obj, *args, **kwargs)
 
 class Actor:
 	"""
