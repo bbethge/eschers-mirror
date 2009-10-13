@@ -18,6 +18,7 @@ import sys
 from glob import glob
 sys.path += glob(os.path.join('build', '*', ''))
 import VideoDecode
+import time
 
 winSize = 640, 480
 
@@ -75,7 +76,8 @@ class Actor:
 		"""
 		This is called by the grid before every frame so the object can update
 		its state.
-		deltaT: time in seconds since last update
+		deltaT: time in seconds since last update; zero if this is the first
+		        update
 		"""
 		pass
 	
@@ -95,18 +97,19 @@ class Grid:
 	vidTex: the texture object holding the current video frame
 	"""
 	def __init__(self):
+		# Set up vidTex
 		self.vidTex = glGenTextures(1)
 		glBindTexture(GL_TEXTURE_2D, self.vidTex)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+		
 		VideoDecode.init(
 			os.path.join(os.path.expanduser('~'), '.xine', 'config'),
 			sys.argv[1])
 		self.vidSize = 1, 1
 		self.vidAspect = 1.
 		self.srcVidSize = 1, 1
-		self.deltaT = 0.
 		self.actors = set()
 		self.drawFixedTiles = Signal()
 		self.drawFlyingTiles = Signal()
@@ -127,7 +130,7 @@ class Grid:
 		puzzle is finished -- either won, lost, or aborted.
 		"""
 		VideoDecode.start()
-		oldTimeMs = pygame.time.get_ticks()
+		oldTime = time.time()
 		done = False
 		while not done and VideoDecode.isPlaying():
 			width, height, aspect, data = VideoDecode.getFrame(20)
@@ -141,9 +144,9 @@ class Grid:
 					done = True
 					break
 				self.handleEvent(event)
-			timeMs = pygame.time.get_ticks()
-			deltaT = (timeMs - oldTimeMs) / 1000.
-			oldTimeMs = timeMs
+			curTime = time.time()
+			deltaT = curTime - oldTime
+			oldTime = curTime
 			# Actors may remove themselves during the update, so we must iterate 
 			# over a copy of self.actors.  FIXME: what if actors remove other
 			# actors?
@@ -222,17 +225,15 @@ class Grid:
 		"""
 		Grab the tile under the cursor
 		"""
-		pass
+		self.startGrab.emit(pos)
 	
 	def releaseTile(self, pos):
-		pass
-	
-	def rotateGrabbed(self, dirxn):
 		"""
-		Rotate the currently grabbed tile to the next valid angle (determined by 
-		the grid/tile type).  dirxn == 1 means ccw; dirxn == -1 means cw.
+		Release the currently grabbed tile
 		"""
-		pass
+		self.endGrab.emit(pos)
+		if self.isSolved():
+			TimeDisplay(self, VideoDecode.getPosition())
 	
 	def isSolved(self):
 		"""
@@ -241,12 +242,22 @@ class Grid:
 		pass
 	
 	def shuffle(self):
+		"""
+		Randomize the locations of the tiles
+		"""
 		pass
 
 	def transformMousePos(self, x, y):
+		"""
+		Transform window coordinates into coordinates relative to the video
+		origin
+		"""
 		return x - self.vidOrigin[0], winSize[1] - self.vidOrigin[1] - y
 	
 	def getMousePos(self):
+		"""
+		Return the current mouse pointer location relative to the video origin
+		"""
 		return self.transformMousePos(*pygame.mouse.get_pos())
 
 class RightTriGrid(Grid):
@@ -265,19 +276,6 @@ class RightTriGrid(Grid):
 		self.drawFixedTiles.emit(self.vidAspect)
 		self.drawFlyingTiles.emit(self.vidAspect)
 	
-	#def swapTiles(self, loc1, loc2):
-	#	tile1 = self.tiles[loc1]
-	#	self.tiles[loc1] = self.tiles[loc2]
-	#	self.tiles[loc2] = tile1
-	
-	def grabTile(self, pos):
-		self.startGrab.emit(pos)
-	
-	def rotateGrabbed(self, dirxn):
-		if self.grabbedTile is not None:
-			self.grabbedIdx = (self.grabbedIdx+dirxn) % 2
-			self.grabOffset = [ -x for x in self.grabOffset ]
-	
 	def findTile(self, pos):
 		"""
 		Find the location (col, row, idx) of the tile at video coordinates pos
@@ -291,11 +289,6 @@ class RightTriGrid(Grid):
 		else:
 			idx = 1
 		return col, row, idx
-	
-	def releaseTile(self, pos):
-		self.endGrab.emit(pos)
-		if self.isSolved():
-			TimeDisplay(self, VideoDecode.getPosition())
 	
 	def isSolved(self):
 		for tile in self.tiles:
@@ -321,7 +314,7 @@ class RightTriTile(Actor):
 	hlTex = 0
 	hlSideVerts = np.empty((len(verts)*4,2), np.double)
 	hlSideTexCoords = np.empty_like(hlSideVerts)
-	rotMat = np.matrix(
+	rotMat = np.matrix(  # a matrix for rotating 90 deg ccw
 		[	[ 0., -1.],
 			[ 1.,  0.] ],
 		np.double)
@@ -407,8 +400,10 @@ class RightTriTile(Actor):
 				self.endFlying()
 	
 	def startGrab(self, mousePos):
-		localX = float(mousePos[0])*self.grid.cols/self.grid.vidSize[0] - self.loc[0]
-		localY = float(mousePos[1])*self.grid.rows/self.grid.vidSize[1] - self.loc[1]
+		localX = (
+			float(mousePos[0])*self.grid.cols/self.grid.vidSize[0]-self.loc[0])
+		localY = (
+			float(mousePos[1])*self.grid.rows/self.grid.vidSize[1]-self.loc[1])
 		if (
 				0. <= localX < 1. and 0. <= localY < 1.
 				and (localX+localY < 1.) == (self.loc[2] == 0)
@@ -638,9 +633,7 @@ Your time is
 		glEnable(GL_TEXTURE_2D)
 
 if __name__ == '__main__':
-	# Apparently this is necessary to make pygame.time.get_ticks() work; we
-	# can't initialize modules individually.
-	pygame.init()
+	pygame.display.init()
 	pygame.display.set_mode(winSize, pygame.OPENGL|pygame.DOUBLEBUF)
 	pygame.display.set_caption("Escher's Mirror", "Escher's Mirror")
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)

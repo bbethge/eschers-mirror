@@ -101,7 +101,7 @@ VideoDecode_init(PyObject *self, PyObject *args) {
 		);
 		return NULL;
 	}
-	xine_stream = xine_stream_new(xine, NULL, xine_video);
+	xine_stream = xine_stream_new(xine, xine_audio, xine_video);
 	if (!xine_open(xine_stream, mrl) ) {
 		PyErr_SetString(PyExc_RuntimeError, "Failed to open MRL");
 		xine_close_video_driver(xine, xine_video);
