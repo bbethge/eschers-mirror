@@ -19,6 +19,7 @@ from glob import glob
 sys.path += glob(os.path.join('build', '*', ''))
 import VideoDecode
 import time
+import dbm
 
 winSize = 640, 480
 
@@ -91,7 +92,52 @@ class Actor:
 	def die(self):
 		self.grid.remove(self)
 
-class Grid:
+class Stage:
+	"""
+	A class that has an event loop and manages a set of Actors
+	"""
+	def __init__(self):
+		self.actors = set()
+	
+	def add(self, actor):
+		self.actors.add(actor)
+	
+	def remove(self, actor):
+		self.actors.remove(actor)
+	
+	def run(self):
+		"""
+		Run the event loop until this Stage is done with its job
+		"""
+		self.__done = False
+		while not self.__done:
+			while True:
+				event = pygame.event.poll()
+				if event.type == NOEVENT:
+					break
+				elif event.type == QUIT:
+					self.quit()
+					break
+				else:
+					self.handleEvent(event)
+			glClear(GL_COLOR_BUFFER_BIT)
+			self.draw()
+			pygame.display.flip()
+			time.sleep(0.030)
+	
+	def draw(self):
+		"""
+		Draw everything on the screen.  It is not necessary to clear the
+		framebuffer or swap buffers.
+		"""
+	
+	def handleEvent(self, event):
+		pass
+	
+	def quit(self):
+		self.__done = True
+
+class Grid(Stage):
 	"""
 	The base class for all grid types, which manage the state of a puzzle.
 	
@@ -104,6 +150,7 @@ class Grid:
 	vidTex: the texture object holding the current video frame
 	"""
 	def __init__(self):
+		Stage.__init__(self)
 		# Set up vidTex
 		self.vidTex = glGenTextures(1)
 		glBindTexture(GL_TEXTURE_2D, self.vidTex)
@@ -117,19 +164,12 @@ class Grid:
 		self.vidSize = 1, 1
 		self.vidAspect = 1.
 		self.srcVidSize = 1, 1
-		self.actors = set()
 		self.drawFixedTiles = Signal()
 		self.drawFlyingTiles = Signal()
 		self.drawOverlays = Signal()
 		self.startGrab = Signal()
 		self.endGrab = Signal()
 		self.rotateTile = Signal()
-	
-	def add(self, actor):
-		self.actors.add(actor)
-	
-	def remove(self, actor):
-		self.actors.remove(actor)
 	
 	def run(self):
 		"""
@@ -156,7 +196,7 @@ class Grid:
 			oldTime = curTime
 			# Actors may remove themselves during the update, so we must iterate 
 			# over a copy of self.actors.  FIXME: what if actors remove other
-			# actors?
+			# actors?  FIXME: move this to Stage somehow.
 			for actor in set(self.actors):
 				actor.update(deltaT)
 			glClear(GL_COLOR_BUFFER_BIT)
@@ -639,6 +679,99 @@ Your time is
 		glDisable(GL_BLEND)
 		glEnable(GL_TEXTURE_2D)
 
+class VideoChooser(Stage):
+	"""
+	A screen that lets the user choose a video to play with.  The videos must be
+	stored under a directory which is supplied to __init__.
+	"""
+	def __init__(self, videoDir):
+		Stage.__init__(self)
+		files = []
+		for root, dirs, dirFiles in os.walk(unicode(videoDir)):
+			files += dirFiles
+		files.sort()
+		self.filesStr = u"\n".join(files)
+		
+		self.surface = (
+			cairo.ImageSurface(cairo.FORMAT_ARGB32, winSize[0], winSize[1]))
+		self.cairoCtx = cairo.Context(self.surface)
+		self.pangoCtx = pangocairo.CairoContext(self.cairoCtx)
+		self.layout = self.pangoCtx.create_layout()
+		self.layout.set_text(self.filesStr)
+		layoutAttrs = pango.AttrList()
+		layoutAttrs.insert(
+			pango.AttrForeground(
+				0x8000, 0x8000, 0xff00, 0, len(self.filesStr)-1))
+		self.layout.set_attributes(layoutAttrs)
+		self.selectedIndex = 0  # Index in filesStr of currently selected option
+		
+		glOrtho(0, winSize[0], 0, winSize[1], -1, 1)
+		glEnable(GL_BLEND)
+		# For use with premultiplied alpha produced by Cairo
+		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
+		glEnable(GL_TEXTURE_2D)
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+		self.texSize = 1
+		while self.texSize < max(*winSize):
+			self.texSize *= 2
+		glTexImage2D(
+			GL_TEXTURE_2D, 0, GL_RGBA, self.texSize, self.texSize, 0, GL_BGRA,
+			GL_UNSIGNED_INT_8_8_8_8_REV, None)
+		
+		self.verts = np.array(
+			[ [ 0, 0 ], [ 0, winSize[1] ], list(winSize), [ winSize[0], 0 ] ],
+			np.double)
+		self.texCoords = np.array(
+			[   [ 0, 0 ], [ 0, winSize[1] ],
+				[ winSize[0], winSize[1] ], [ winSize[0], 0 ] ],
+			np.double)
+		self.__updatePixels()
+		glMatrixMode(GL_TEXTURE)
+		glLoadIdentity()
+		glScaled(1./self.texSize, -1./self.texSize, 1.)
+		glTranslated(0., -winSize[1], 0.)
+	
+	def __updatePixels(self):
+		# Erase the cairo surface
+		self.cairoCtx.set_operator(cairo.OPERATOR_CLEAR)
+		self.cairoCtx.paint()
+		self.cairoCtx.set_operator(cairo.OPERATOR_OVER)
+		
+		self.pangoCtx.show_layout(self.layout)
+		pixels = str(self.surface.get_data())
+		glTexSubImage2D(
+			GL_TEXTURE_2D, 0, 0, 0, winSize[0], winSize[1], GL_BGRA,
+			GL_UNSIGNED_INT_8_8_8_8_REV, pixels)
+	
+	def draw(self):
+		glRasterPos2i(0, winSize[1]-1)
+		glTexCoordPointerd(self.texCoords)
+		glVertexPointerd(self.verts)
+		glDrawArrays(GL_QUADS, 0, 4)
+	
+	def handleEvent(self, event):
+		if event.type == KEYDOWN:
+			self.quit()
+		elif event.type == MOUSEMOTION:
+			index, unused = self.layout.xy_to_index(
+				pango.SCALE*event.pos[0], pango.SCALE*event.pos[1])
+			start = self.filesStr.rfind('\n', 0, index) + 1
+			if start != self.selectedIndex:
+				self.selectedIndex = start
+				end = self.filesStr.find('\n', index, len(self.filesStr))
+				if end == -1:
+					end = len(self.filesStr)
+				layoutAttrs = pango.AttrList()
+				layoutAttrs.insert(
+					pango.AttrForeground(
+						0x8000, 0x8000, 0xff00, 0, len(self.filesStr)-1))
+				layoutAttrs.insert(
+					pango.AttrForeground(0xffff, 0xffff, 0, start, end))
+				self.layout.set_attributes(layoutAttrs)
+				self.__updatePixels()
+
 if __name__ == '__main__':
 	pygame.display.init()
 	pygame.display.set_mode(winSize, pygame.OPENGL|pygame.DOUBLEBUF)
@@ -649,11 +782,23 @@ if __name__ == '__main__':
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY)
 	glEnableClientState(GL_VERTEX_ARRAY)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-	glClearColor(0.0, 0.0, 0.0, 1.0)
+	glClearColor(0.5, 0.0, 0.0, 1.0)
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
 	
-	grid = RightTriGrid(2, 3)
+	config = dbm.open(os.path.expanduser('~/.eschers-mirror'), 'c')
+	if 'video-dir' not in config:
+		config['video-dir'] = os.getcwd()
+	
+	chooser = VideoChooser(config['video-dir'])
+	chooser.run()
+	sys.exit(0)
+	
+	if 'grid-cols' not in config:
+		config['grid-cols'] = '3'
+	if 'grid-rows' not in config:
+		config['grid-rows'] = '2'
+	grid = RightTriGrid(int(config['grid-rows']), int(config['grid-cols']))
 	grid.run()
 
 # vim: set ts=4 sts=4 sw=4 noet :
