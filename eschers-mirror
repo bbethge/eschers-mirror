@@ -19,7 +19,6 @@ from glob import glob
 sys.path += glob(os.path.join('build', '*', ''))
 import VideoDecode
 import time
-import ConfigParser
 import bisect
 
 winSize = 640, 480
@@ -829,28 +828,28 @@ if __name__ == '__main__':
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
 	
-	config = ConfigParser.SafeConfigParser()
-	config.read(os.path.expanduser('~/.eschers-mirror.ini'))
-	if not config.has_option('DEFAULT', 'video-dir'):
-		config.set('DEFAULT', 'video-dir', os.getcwd())
+	config = {}
+	try:
+		execfile(os.path.expanduser('~/.eschers-mirror.py'), {}, config)
+	except IOError:
+		config = {
+			'video_dir': os.path.expanduser('~/Videos'),
+			'grid_rows': 2,
+			'grid_cols': 3 }
 	
-	chooser = VideoChooser(config.get('DEFAULT', 'video-dir'))
+	chooser = VideoChooser(config['video_dir'])
 	videoFile = chooser.run()
 	
 	if videoFile is not None:
-		if not config.has_option('DEFAULT', 'grid-cols'):
-			config.set('DEFAULT', 'grid-cols', '3')
-		if not config.has_option('DEFAULT', 'grid-rows'):
-			config.set('DEFAULT', 'grid-rows', '2')
 		grid = RightTriGrid(
-			os.path.join(config.get('DEFAULT', 'video-dir'), videoFile),
-			config.getint('DEFAULT', 'grid-cols'),
-			config.getint('DEFAULT', 'grid-rows'))
+			os.path.join(config['video_dir'], videoFile),
+			config['grid_rows'], config['grid_cols'])
 		grid.run()
 	
-	configFile = open(os.path.expanduser('~/.eschers-mirror.ini'), 'w')
-	config.write(configFile)
+	configFile = open(os.path.expanduser('~/.eschers-mirror.py'), 'w')
+	for key, value in config.iteritems():
+		if key[0] != '_':
+			configFile.write('%s = %s\n' % (key,repr(value)))
 	configFile.close()
-	
 
 # vim: set ts=4 sts=4 sw=4 noet :
