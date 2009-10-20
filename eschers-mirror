@@ -20,8 +20,7 @@ sys.path += glob(os.path.join('build', '*', ''))
 import VideoDecode
 import time
 import bisect
-
-winSize = 640, 480
+from Config import config
 
 class Signal:
 	"""
@@ -237,11 +236,11 @@ class Grid(Stage):
 					self.rotateTile.emit(1)
 	
 	def handleSizeChange(self, width, height, aspect):
-		if aspect >= float(winSize[0])/winSize[1]:
-			self.vidSize = winSize[0], round(winSize[0]/aspect)
+		if aspect >= float(config.window_size[0])/config.window_size[1]:
+			self.vidSize = config.window_size[0], round(config.window_size[0]/aspect)
 		else:
-			self.vidSize = round(winSize[1]*aspect), winSize[1]
-		self.vidOrigin = [ (w-v)/2 for w, v in zip(winSize, self.vidSize) ]
+			self.vidSize = round(config.window_size[1]*aspect), config.window_size[1]
+		self.vidOrigin = [ (w-v)/2 for w, v in zip(config.window_size, self.vidSize) ]
 		self.vidAspect = aspect
 		self.srcVidSize = width, height
 		# Find the smallest power-of-2--sized square that can contain the frame
@@ -264,8 +263,8 @@ class Grid(Stage):
 		glMatrixMode(GL_PROJECTION)
 		glLoadIdentity()
 		glOrtho(
-			-self.vidOrigin[0], winSize[0]-self.vidOrigin[0],
-			-self.vidOrigin[1], winSize[1]-self.vidOrigin[1],
+			-self.vidOrigin[0], config.window_size[0]-self.vidOrigin[0],
+			-self.vidOrigin[1], config.window_size[1]-self.vidOrigin[1],
 			-1.0, 1.0)
 		glMatrixMode(GL_MODELVIEW)
 	
@@ -303,7 +302,7 @@ class Grid(Stage):
 		Transform window coordinates into coordinates relative to the video
 		origin
 		"""
-		return x - self.vidOrigin[0], winSize[1] - self.vidOrigin[1] - y
+		return x - self.vidOrigin[0], config.window_size[1] - self.vidOrigin[1] - y
 	
 	def getMousePos(self):
 		"""
@@ -625,7 +624,7 @@ class TimeDisplay(Actor):
 	def __init__(self, grid, time):
 		Actor.__init__(self, grid)
 		timeStr = "%d:%02d" % (int(time/60), int(time%60))
-		surface = cairo.ImageSurface(cairo.FORMAT_A8, winSize[0], winSize[1])
+		surface = cairo.ImageSurface(cairo.FORMAT_A8, config.window_size[0], config.window_size[1])
 		cairoCtx = cairo.Context(surface)
 		pangoCtx = pangocairo.CairoContext(cairoCtx)
 		layout = pangoCtx.create_layout()
@@ -637,7 +636,7 @@ Your time is
 		pangoCtx.show_layout(layout)
 		self.size = layout.get_pixel_size()
 		arrData = np.frombuffer(surface.get_data(), np.uint8)
-		arrData = arrData.reshape((winSize[1],winSize[0]))
+		arrData = arrData.reshape((config.window_size[1],config.window_size[0]))
 		color = np.array([255, 255, 0, 255], np.uint8)
 		self.pixelData = np.tile(color, (self.size[1], self.size[0], 1))
 		self.pixelData[:,:,3] = arrData[:self.size[1], :self.size[0]]
@@ -711,7 +710,7 @@ class VideoChooser(Stage):
 		self.files.append(self.File(index, None))
 		
 		self.surface = (
-			cairo.ImageSurface(cairo.FORMAT_ARGB32, winSize[0], winSize[1]))
+			cairo.ImageSurface(cairo.FORMAT_ARGB32, config.window_size[0], config.window_size[1]))
 		self.cairoCtx = cairo.Context(self.surface)
 		self.pangoCtx = pangocairo.CairoContext(self.cairoCtx)
 		self.layout = self.pangoCtx.create_layout()
@@ -724,7 +723,7 @@ class VideoChooser(Stage):
 		self.selectedIndex = 0  # Index in filesStr of currently selected option
 		self.yOffset = 0
 		
-		glOrtho(0, winSize[0], 0, winSize[1], -1, 1)
+		glOrtho(0, config.window_size[0], 0, config.window_size[1], -1, 1)
 		glEnable(GL_BLEND)
 		# For use with premultiplied alpha produced by Cairo
 		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
@@ -733,24 +732,24 @@ class VideoChooser(Stage):
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 		self.texSize = 1
-		while self.texSize < max(*winSize):
+		while self.texSize < max(*config.window_size):
 			self.texSize *= 2
 		glTexImage2D(
 			GL_TEXTURE_2D, 0, GL_RGBA, self.texSize, self.texSize, 0, GL_BGRA,
 			GL_UNSIGNED_INT_8_8_8_8_REV, None)
 		
 		self.verts = np.array(
-			[ [ 0, 0 ], [ 0, winSize[1] ], list(winSize), [ winSize[0], 0 ] ],
+			[ [ 0, 0 ], [ 0, config.window_size[1] ], list(config.window_size), [ config.window_size[0], 0 ] ],
 			np.double)
 		self.texCoords = np.array(
-			[   [ 0, 0 ], [ 0, winSize[1] ],
-				[ winSize[0], winSize[1] ], [ winSize[0], 0 ] ],
+			[   [ 0, 0 ], [ 0, config.window_size[1] ],
+				[ config.window_size[0], config.window_size[1] ], [ config.window_size[0], 0 ] ],
 			np.double)
 		self.__updatePixels()
 		glMatrixMode(GL_TEXTURE)
 		glLoadIdentity()
 		glScaled(1./self.texSize, -1./self.texSize, 1.)
-		glTranslated(0., -winSize[1], 0.)
+		glTranslated(0., -config.window_size[1], 0.)
 	
 	def __updatePixels(self):
 		# Erase the cairo surface
@@ -761,11 +760,11 @@ class VideoChooser(Stage):
 		self.pangoCtx.show_layout(self.layout)
 		pixels = str(self.surface.get_data())
 		glTexSubImage2D(
-			GL_TEXTURE_2D, 0, 0, 0, winSize[0], winSize[1], GL_BGRA,
+			GL_TEXTURE_2D, 0, 0, 0, config.window_size[0], config.window_size[1], GL_BGRA,
 			GL_UNSIGNED_INT_8_8_8_8_REV, pixels)
 	
 	def draw(self):
-		glRasterPos2i(0, winSize[1]-1)
+		glRasterPos2i(0, config.window_size[1]-1)
 		glTexCoordPointerd(self.texCoords)
 		glVertexPointerd(self.verts)
 		glDrawArrays(GL_QUADS, 0, 4)
@@ -816,7 +815,7 @@ class VideoChooser(Stage):
 
 if __name__ == '__main__':
 	pygame.display.init()
-	pygame.display.set_mode(winSize, pygame.OPENGL|pygame.DOUBLEBUF)
+	pygame.display.set_mode(config.window_size, pygame.OPENGL|pygame.DOUBLEBUF)
 	pygame.display.set_caption("Escher's Mirror", "Escher's Mirror")
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
 	glEnable(GL_TEXTURE_2D)
@@ -828,28 +827,15 @@ if __name__ == '__main__':
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
 	
-	config = {}
-	try:
-		execfile(os.path.expanduser('~/.eschers-mirror.py'), {}, config)
-	except IOError:
-		config = {
-			'video_dir': os.path.expanduser('~/Videos'),
-			'grid_rows': 2,
-			'grid_cols': 3 }
-	
-	chooser = VideoChooser(config['video_dir'])
+	chooser = VideoChooser(config.video_dir)
 	videoFile = chooser.run()
 	
 	if videoFile is not None:
 		grid = RightTriGrid(
-			os.path.join(config['video_dir'], videoFile),
-			config['grid_rows'], config['grid_cols'])
+			os.path.join(config.video_dir, videoFile),
+			config.grid_rows, config.grid_cols)
 		grid.run()
 	
-	configFile = open(os.path.expanduser('~/.eschers-mirror.py'), 'w')
-	for key, value in config.iteritems():
-		if key[0] != '_':
-			configFile.write('%s = %s\n' % (key,repr(value)))
-	configFile.close()
+	config.write()
 
 # vim: set ts=4 sts=4 sw=4 noet :
