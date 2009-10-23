@@ -17,6 +17,7 @@ import bisect
 from Config import config
 from Signal import Signal
 from Actor import Stage
+from TimeDisplay import TimeDisplay
 
 class Grid(Stage):
 	"""
@@ -32,6 +33,7 @@ class Grid(Stage):
 	"""
 	def __init__(self, videoFile):
 		Stage.__init__(self)
+		glClearColor(0.0, 0.0, 0.0, 1.0)
 		# Set up vidTex
 		self.vidTex = glGenTextures(1)
 		glBindTexture(GL_TEXTURE_2D, self.vidTex)

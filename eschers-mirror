@@ -11,80 +11,11 @@ import pango
 import pangocairo
 import os
 import numpy as np
-from math import *  # math is delicious
-import random
-import sys
-from glob import glob
-sys.path += glob(os.path.join('build', '*', ''))
-import VideoDecode
 import time
 import bisect
 from Config import config
-from Signal import Signal
-from Actor import Actor, Stage
+from Actor import Stage
 from RightTriGrid import RightTriGrid
-
-class TimeDisplay(Actor):
-	def __init__(self, grid, time):
-		Actor.__init__(self, grid)
-		timeStr = "%d:%02d" % (int(time/60), int(time%60))
-		surface = cairo.ImageSurface(cairo.FORMAT_A8, config.window_size[0], config.window_size[1])
-		cairoCtx = cairo.Context(surface)
-		pangoCtx = pangocairo.CairoContext(cairoCtx)
-		layout = pangoCtx.create_layout()
-		layout.set_markup("""\
-<span foreground="yellow"><span size="large">Congratulations!</span>
-Your time is
-<span size="72000">%s</span></span>""" % timeStr)
-		layout.set_alignment(pango.ALIGN_CENTER)
-		pangoCtx.show_layout(layout)
-		self.size = layout.get_pixel_size()
-		arrData = np.frombuffer(surface.get_data(), np.uint8)
-		arrData = arrData.reshape((config.window_size[1],config.window_size[0]))
-		color = np.array([255, 255, 0, 255], np.uint8)
-		self.pixelData = np.tile(color, (self.size[1], self.size[0], 1))
-		self.pixelData[:,:,3] = arrData[:self.size[1], :self.size[0]]
-		del surface
-		
-		self.pos = [
-			(self.grid.vidSize[0] - self.size[0])/2.,
-			(self.grid.vidSize[1] - self.size[1])/2.]
-	
-		self.grid.drawOverlays.addHandler(self.__class__.draw, self)
-		self.time = 0.
-		self.state = 'sitting'
-	
-	def update(self, deltaT):
-		if self.state == 'sitting':
-			if self.time < 3.:
-				self.time += deltaT
-			else:
-				self.state = 'falling'
-				self.time = 0.
-		elif self.state == 'falling':
-			if self.pos[1]+self.size[1] > -self.grid.vidOrigin[1]:
-				self.time += deltaT
-				self.pos[1] += -1500 * self.time * deltaT
-			else:
-				self.die()
-	
-	def draw(self):
-		glDisable(GL_TEXTURE_2D)
-		glEnable(GL_BLEND)
-		glColor4d(0., 0., 0., 0.5)
-		glRectd(
-			self.pos[0], self.pos[1],
-			self.pos[0] + self.size[0], self.pos[1] + self.size[1])
-		glRasterPos2d(self.pos[0], self.pos[1]+self.size[1])
-		oldZoomX = glGetDouble(GL_ZOOM_X)
-		oldZoomY = glGetDouble(GL_ZOOM_Y)
-		glPixelZoom(1., -1.)
-		glDrawPixels(
-			self.size[0], self.size[1], GL_RGBA, GL_UNSIGNED_BYTE,
-			self.pixelData)
-		glPixelZoom(oldZoomX, oldZoomY)
-		glDisable(GL_BLEND)
-		glEnable(GL_TEXTURE_2D)
 
 class VideoChooser(Stage):
 	"""
@@ -113,8 +44,9 @@ class VideoChooser(Stage):
 			index += len(fileName) + 1
 		self.files.append(self.File(index, None))
 		
-		self.surface = (
-			cairo.ImageSurface(cairo.FORMAT_ARGB32, config.window_size[0], config.window_size[1]))
+		self.surface = cairo.ImageSurface(
+				cairo.FORMAT_ARGB32,
+				config.window_size[0], config.window_size[1])
 		self.cairoCtx = cairo.Context(self.surface)
 		self.pangoCtx = pangocairo.CairoContext(self.cairoCtx)
 		self.layout = self.pangoCtx.create_layout()
@@ -127,11 +59,7 @@ class VideoChooser(Stage):
 		self.selectedIndex = 0  # Index in filesStr of currently selected option
 		self.yOffset = 0
 		
-		glOrtho(0, config.window_size[0], 0, config.window_size[1], -1, 1)
-		glEnable(GL_BLEND)
-		# For use with premultiplied alpha produced by Cairo
-		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
-		glEnable(GL_TEXTURE_2D)
+		glClearColor(0.5, 0.0, 0.0, 1.0)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
@@ -143,17 +71,23 @@ class VideoChooser(Stage):
 			GL_UNSIGNED_INT_8_8_8_8_REV, None)
 		
 		self.verts = np.array(
-			[ [ 0, 0 ], [ 0, config.window_size[1] ], list(config.window_size), [ config.window_size[0], 0 ] ],
+			[   [ 0, 0 ],
+				[ 0, config.window_size[1] ],
+				list(config.window_size),
+				[ config.window_size[0], 0 ] ],
 			np.double)
 		self.texCoords = np.array(
-			[   [ 0, 0 ], [ 0, config.window_size[1] ],
-				[ config.window_size[0], config.window_size[1] ], [ config.window_size[0], 0 ] ],
+			[   [ 0, 0 ],
+				[ 0, config.window_size[1] ],
+				[ config.window_size[0], config.window_size[1] ],
+				[ config.window_size[0], 0 ] ],
 			np.double)
 		self.__updatePixels()
 		glMatrixMode(GL_TEXTURE)
 		glLoadIdentity()
 		glScaled(1./self.texSize, -1./self.texSize, 1.)
 		glTranslated(0., -config.window_size[1], 0.)
+		glMatrixMode(GL_MODELVIEW)
 	
 	def __updatePixels(self):
 		# Erase the cairo surface
@@ -164,14 +98,20 @@ class VideoChooser(Stage):
 		self.pangoCtx.show_layout(self.layout)
 		pixels = str(self.surface.get_data())
 		glTexSubImage2D(
-			GL_TEXTURE_2D, 0, 0, 0, config.window_size[0], config.window_size[1], GL_BGRA,
+			GL_TEXTURE_2D, 0, 0, 0,
+			config.window_size[0], config.window_size[1], GL_BGRA,
 			GL_UNSIGNED_INT_8_8_8_8_REV, pixels)
 	
 	def draw(self):
+		glEnable(GL_BLEND)
+		# For use with premultiplied alpha produced by Cairo
+		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
 		glRasterPos2i(0, config.window_size[1]-1)
 		glTexCoordPointerd(self.texCoords)
 		glVertexPointerd(self.verts)
 		glDrawArrays(GL_QUADS, 0, 4)
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+		glDisable(GL_BLEND)
 	
 	def handleEvent(self, event):
 		if event.type == KEYDOWN:
@@ -221,15 +161,20 @@ if __name__ == '__main__':
 	pygame.display.init()
 	pygame.display.set_mode(config.window_size, pygame.OPENGL|pygame.DOUBLEBUF)
 	pygame.display.set_caption("Escher's Mirror", "Escher's Mirror")
+	
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+	
+	glMatrixMode(GL_PROJECTION)
+	glOrtho(0, config.window_size[0], 0, config.window_size[1], -1, 1)
+	glMatrixMode(GL_MODELVIEW)
+	glLoadIdentity()
+	
 	glEnable(GL_TEXTURE_2D)
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE)
+	
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY)
 	glEnableClientState(GL_VERTEX_ARRAY)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-	glClearColor(0.5, 0.0, 0.0, 1.0)
-	glMatrixMode(GL_MODELVIEW)
-	glLoadIdentity()
 	
 	chooser = VideoChooser(config.video_dir)
 	videoFile = chooser.run()
