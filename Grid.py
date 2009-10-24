@@ -129,10 +129,11 @@ class Grid(Stage):
 		while texSize < max(width, height):
 			texSize *= 2
 		glBindTexture(GL_TEXTURE_2D, self.vidTex)
-		# Set the active texture to a blank texSize*texSize square (the image 
+		# Set the active texture to a random texSize*texSize square (the image 
 		# will be filled in later).
-		texInitializer = np.zeros((texSize,texSize,3), np.uint8)
-		glTexImage2Dub(GL_TEXTURE_2D, 0, GL_RGB, 0, GL_RGB, texInitializer)
+		glTexImage2D(
+			GL_TEXTURE_2D, 0, GL_RGB, texSize, texSize, 0, GL_RGB,
+			GL_UNSIGNED_BYTE, None)
 		# Set up the texture matrix to compensate for the pixel data being in
 		# top-to-bottom order.
 		glMatrixMode(GL_TEXTURE)
