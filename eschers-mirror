@@ -6,16 +6,14 @@ OpenGL.ERROR_ON_COPY = True
 from OpenGL.GL import *
 import pygame
 from pygame.locals import *
-import cairo
 import pango
-import pangocairo
 import os
-import numpy as np
 import time
 import bisect
 from Config import config
 from Actor import Stage
 from RightTriGrid import RightTriGrid
+from Layout import Layout
 
 class VideoChooser(Stage):
 	"""
@@ -44,80 +42,26 @@ class VideoChooser(Stage):
 			index += len(fileName) + 1
 		self.files.append(self.File(index, None))
 		
-		self.surface = cairo.ImageSurface(
-				cairo.FORMAT_ARGB32,
-				config.window_size[0], config.window_size[1])
-		self.cairoCtx = cairo.Context(self.surface)
-		self.pangoCtx = pangocairo.CairoContext(self.cairoCtx)
-		self.layout = self.pangoCtx.create_layout()
-		self.layout.set_text(filesStr)
+		self.layout = Layout(0, 0, *config.window_size)
+		self.layout.layout.set_text(filesStr)
 		layoutAttrs = pango.AttrList()
 		layoutAttrs.insert(
 			pango.AttrForeground(
 				0x8000, 0x8000, 0xff00, 0, len(filesStr)))
-		self.layout.set_attributes(layoutAttrs)
+		self.layout.layout.set_attributes(layoutAttrs)
+		self.layout.layoutChanged()
 		self.selectedIndex = 0  # Index in filesStr of currently selected option
-		self.yOffset = 0
 		
 		glClearColor(0.5, 0.0, 0.0, 1.0)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-		self.texSize = 1
-		while self.texSize < max(*config.window_size):
-			self.texSize *= 2
-		glTexImage2D(
-			GL_TEXTURE_2D, 0, GL_RGBA, self.texSize, self.texSize, 0, GL_BGRA,
-			GL_UNSIGNED_INT_8_8_8_8_REV, None)
-		
-		self.verts = np.array(
-			[   [ 0, 0 ],
-				[ 0, config.window_size[1] ],
-				list(config.window_size),
-				[ config.window_size[0], 0 ] ],
-			np.double)
-		self.texCoords = np.array(
-			[   [ 0, 0 ],
-				[ 0, config.window_size[1] ],
-				[ config.window_size[0], config.window_size[1] ],
-				[ config.window_size[0], 0 ] ],
-			np.double)
-		self.__updatePixels()
-		glMatrixMode(GL_TEXTURE)
-		glLoadIdentity()
-		glScaled(1./self.texSize, -1./self.texSize, 1.)
-		glTranslated(0., -config.window_size[1], 0.)
-		glMatrixMode(GL_MODELVIEW)
-	
-	def __updatePixels(self):
-		# Erase the cairo surface
-		self.cairoCtx.set_operator(cairo.OPERATOR_CLEAR)
-		self.cairoCtx.paint()
-		self.cairoCtx.set_operator(cairo.OPERATOR_OVER)
-		
-		self.pangoCtx.show_layout(self.layout)
-		pixels = str(self.surface.get_data())
-		glTexSubImage2D(
-			GL_TEXTURE_2D, 0, 0, 0,
-			config.window_size[0], config.window_size[1], GL_BGRA,
-			GL_UNSIGNED_INT_8_8_8_8_REV, pixels)
 	
 	def draw(self):
-		glEnable(GL_BLEND)
-		# For use with premultiplied alpha produced by Cairo
-		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
-		glRasterPos2i(0, config.window_size[1]-1)
-		glTexCoordPointerd(self.texCoords)
-		glVertexPointerd(self.verts)
-		glDrawArrays(GL_QUADS, 0, 4)
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-		glDisable(GL_BLEND)
+		self.layout.draw()
 	
 	def handleEvent(self, event):
 		if event.type == KEYDOWN:
 			self.quit()
 		elif event.type == MOUSEMOTION:
-			index = self.xy_to_index(*event.pos)
+			index = self.layout.xy_to_index(*event.pos)
 			filesIndex = (
 				bisect.bisect_right(self.files, self.File(index, None)) - 1)
 			start = self.files[filesIndex].index
@@ -130,32 +74,18 @@ class VideoChooser(Stage):
 						0x8000, 0x8000, 0xff00, 0, self.files[-1].index))
 				layoutAttrs.insert(
 					pango.AttrForeground(0xffff, 0xffff, 0, start, end))
-				self.layout.set_attributes(layoutAttrs)
-				self.__updatePixels()
+				self.layout.layout.set_attributes(layoutAttrs)
+				self.layout.layoutChanged()
 		elif event.type == MOUSEBUTTONDOWN:
-			def update():
-				self.__updatePixels()
-				self.pangoCtx.update_layout(self.layout)
 			if event.button == 4:  # scroll up
-				self.cairoCtx.translate(0, self.scrollAmount)
-				self.yOffset += self.scrollAmount
-				update()
+				self.layout.scroll(0, self.scrollAmount)
 			elif event.button == 5:  # scroll down
-				self.cairoCtx.translate(0, -self.scrollAmount)
-				self.yOffset -= self.scrollAmount
-				update()
+				self.layout.scroll(0, -self.scrollAmount)
 			elif event.button == 1:
-				index = self.xy_to_index(*event.pos)
+				index = self.layout.xy_to_index(*event.pos)
 				filesIndex = (
 					bisect.bisect_right(self.files, self.File(index, None)) - 1)
 				self.quit(self.files[filesIndex].name)
-		
-	def xy_to_index(self, x, y):
-		index = self.layout.xy_to_index(
-			pango.SCALE * x, pango.SCALE * (y-self.yOffset)) [0]
-		if index < 0:
-			raise RuntimeError("Pango returned bad index")
-		return index
 
 if __name__ == '__main__':
 	pygame.display.init()
