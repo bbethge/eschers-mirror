@@ -29,9 +29,11 @@ class Layout:
 		np.double)
 	
 	def __init__(self, x, y, width, height):
-		self.pos = x, y
+		"""
+		This should only be called by subclasses.
+		"""
 		self.size = width, height
-		self.scrollAmount = [ 0, 0 ]
+		self.setUpLayout()
 		
 		# Make a texture object for ourselves
 		self.texture = glGenTextures(1)
@@ -39,36 +41,47 @@ class Layout:
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-		
+	
+	def setUpLayout(self):		
+		"""
+		Set up the Pango red tape needed to create a layout
+		"""
+		self.surface = cairo.ImageSurface(
+			cairo.FORMAT_ARGB32, self.size[0], self.size[1])
+		self.cairoCtx = cairo.Context(self.surface)
+		self.pangoCtx = pangocairo.CairoContext(self.cairoCtx)
+		self.layout = self.pangoCtx.create_layout()
+	
+	def sizeChanged(self):
+		"""
+		(Re)initialize things that depend on the size of the rectangle
+		"""
 		# Request the texture to be the smallest valid size that we will fit
 		# into
-		texWidth = nextPowerOf2(width)
-		texHeight = nextPowerOf2(height)
+		texWidth = nextPowerOf2(self.size[0])
+		texHeight = nextPowerOf2(self.size[1])
 		glTexImage2D(
 			GL_TEXTURE_2D, 0, GL_RGBA, texWidth, texHeight, 0, GL_BGRA,
 			GL_UNSIGNED_INT_8_8_8_8_REV, None)
 		
-		# Set up the Pango red tape needed to render a layout to memory
-		self.surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
-		self.cairoCtx = cairo.Context(self.surface)
-		self.pangoCtx = pangocairo.CairoContext(self.cairoCtx)
-		self.layout = self.pangoCtx.create_layout()
-		
 		# Create vertex arrays for drawing our rectangle
 		self.verts = np.array(
-			[   [ x, y ],
-				[ x+width, y ],
-				[ x+width, y+height ],
-				[ x, y+height ] ],
+			[   [ 0, 0 ],
+				[ self.size[0], 0 ],
+				[ self.size[0], self.size[1] ],
+				[ 0, self.size[1] ] ],
 			np.double)
 		self.texMatrix = np.array(
-			[   [ float(width)/texWidth, 0., 0., 0. ],
-				[ 0., float(height)/texHeight, 0., 0. ],
+			[   [ float(self.size[0])/texWidth, 0., 0., 0. ],
+				[ 0., float(self.size[1])/texHeight, 0., 0. ],
 				[ 0., 0., 1., 0, ],
 				[ 0., 0., 0., 1. ] ],
 			np.double)
 	
 	def layoutChanged(self):
+		"""
+		This should be called by the client after it changes self.layout.
+		"""
 		# Erase the cairo surface
 		self.cairoCtx.set_operator(cairo.OPERATOR_CLEAR)
 		self.cairoCtx.paint()
@@ -104,18 +117,51 @@ class Layout:
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 		glDisable(GL_BLEND)
 	
+	def xy_to_index(self, x, y):
+		index = self.layout.xy_to_index(
+			pango.SCALE * x,
+			pango.SCALE * (self.size[1]-y)) [0]
+		if index < 0:
+			raise RuntimeError("Pango returned bad index")
+		return index
+
+class AutosizedLayout(Layout):
+	def __init__(self, x, y):
+		Layout.__init__(self, x, y, 0, 0)
+	
+	def layoutChanged(self, sameSize=False):
+		if not sameSize:
+			# Recompute the size of the layout
+			self.size = self.layout.get_pixel_size()
+			# Save the text and attributes of self.layout since it will be
+			# recreated in setUpLayout().
+			text = self.layout.get_text()
+			attrs = self.layout.get_attributes()
+			self.setUpLayout()
+			# Restore text and attributes to the newly-created layout
+			self.layout.set_text(text)
+			if attrs is not None:
+				self.layout.set_attributes(attrs)
+			self.sizeChanged()
+		
+		Layout.layoutChanged(self)
+
+class ScrollableLayout(Layout):
+	def __init__(self, x, y, width, height):
+		Layout.__init__(self, x, y, width, height)
+		self.sizeChanged()
+		self.scrollAmount = [ 0, 0 ]
+
 	def scroll(self, deltaX, deltaY):
+		# This depends on the fact that, unlike AutosizeLayout, we do not
+		# recreate our Cairo context after initialization
 		self.cairoCtx.translate(-deltaX, deltaY)
 		self.scrollAmount[0] += deltaX
 		self.scrollAmount[1] += deltaY
 		self.layoutChanged()
 	
 	def xy_to_index(self, x, y):
-		index = self.layout.xy_to_index(
-			pango.SCALE * (x+self.scrollAmount[0]),
-			pango.SCALE * (y-self.scrollAmount[1])) [0]
-		if index < 0:
-			raise RuntimeError("Pango returned bad index")
-		return index
+		return Layout.xy_to_index(
+			self, x+self.scrollAmount[0], y+self.scrollAmount[1])
 
 # vim: set ts=4 sts=4 sw=4 noet :

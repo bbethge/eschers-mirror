@@ -8,14 +8,17 @@ import pygame
 from pygame.locals import *
 import pango
 import os
+import sys
 import time
 import bisect
 from Config import config
-from Actor import Stage
-from RightTriGrid import RightTriGrid
-from Layout import Layout
+from Actor import Actor
+#from RightTriGrid import RightTriGrid
+from Layout import ScrollableLayout, AutosizedLayout
+from MainLoop import MainLoop
+from Button import Button
 
-class VideoChooser(Stage):
+class VideoChooser:
 	"""
 	A screen that lets the user choose a video to play with.  The videos must be
 	stored under a directory which is supplied to __init__.
@@ -42,7 +45,7 @@ class VideoChooser(Stage):
 			index += len(fileName) + 1
 		self.files.append(self.File(index, None))
 		
-		self.layout = Layout(0, 0, *config.window_size)
+		self.layout = ScrollableLayout(0, 0, *config.window_size)
 		self.layout.layout.set_text(filesStr)
 		layoutAttrs = pango.AttrList()
 		layoutAttrs.insert(
@@ -61,7 +64,8 @@ class VideoChooser(Stage):
 		if event.type == KEYDOWN:
 			self.quit()
 		elif event.type == MOUSEMOTION:
-			index = self.layout.xy_to_index(*event.pos)
+			index = self.layout.xy_to_index(
+				event.pos[0], config.window_size[1]-event.pos[1]-1)
 			filesIndex = (
 				bisect.bisect_right(self.files, self.File(index, None)) - 1)
 			start = self.files[filesIndex].index
@@ -105,6 +109,15 @@ if __name__ == '__main__':
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY)
 	glEnableClientState(GL_VERTEX_ARRAY)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+	
+	main = MainLoop()
+	b = Button(
+		main, 200, 100, '<span size="larger" foreground="yellow">foobar</span>',
+		[ 0., 0., 1. ])
+	
+	main.run()
+	
+	sys.exit(0)
 	
 	chooser = VideoChooser(config.video_dir)
 	videoFile = chooser.run()
