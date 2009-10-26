@@ -99,10 +99,10 @@ if __name__ == '__main__':
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
 	
 	glMatrixMode(GL_PROJECTION)
-	# We make GL use lexicographic coordinates (y increases downward) because
+	# We make GL use lexographic coordinates (y increases downward) because
 	# other libraries also use them and are less flexible about their coordinate
 	# systems.
-	glOrtho(0, config.window_size[0], config.window_size[1], 0 -1, 1)
+	glOrtho(0, config.window_size[0], config.window_size[1], 0, -1, 1)
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
 	
@@ -115,8 +115,9 @@ if __name__ == '__main__':
 	
 	main = MainLoop()
 	b = Button(
-		main, 200, 100, '<span size="larger" foreground="yellow">foobar</span>',
-		[ 0., 0., 1. ])
+		main, 200, 100,
+		'<span size="xx-large" foreground="#ffe860">foobar</span>',
+		[ 0xff, 0xc0, 0x50 ])
 	
 	main.run()
 	

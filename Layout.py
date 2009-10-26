@@ -22,10 +22,10 @@ class Layout:
 	"""
 	
 	texCoords = np.array(
-		[   [ 0, 1 ],
-			[ 1, 1 ],
+		[   [ 0, 0 ],
 			[ 1, 0 ],
-			[ 0, 0 ] ],
+			[ 1, 1 ],
+			[ 0, 1 ] ],
 		np.double)
 	
 	def __init__(self, x, y, width, height):
