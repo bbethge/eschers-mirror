@@ -99,7 +99,10 @@ if __name__ == '__main__':
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
 	
 	glMatrixMode(GL_PROJECTION)
-	glOrtho(0, config.window_size[0], 0, config.window_size[1], -1, 1)
+	# We make GL use lexicographic coordinates (y increases downward) because
+	# other libraries also use them and are less flexible about their coordinate
+	# systems.
+	glOrtho(0, config.window_size[0], config.window_size[1], 0 -1, 1)
 	glMatrixMode(GL_MODELVIEW)
 	glLoadIdentity()
 	
