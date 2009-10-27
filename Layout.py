@@ -124,6 +124,15 @@ class Layout:
 		if index < 0:
 			raise RuntimeError("Pango returned bad index")
 		return index
+	
+	def setColor(self, color):
+		layoutAttrs = self.layout.get_attributes() or pango.AttrList()
+		layoutAttrs.insert(
+			pango.AttrForeground(
+				color[0]*0x100, color[1]*0x100, color[2]*0x100,
+				0, len(self.layout.get_text())))
+		self.layout.set_attributes(layoutAttrs)
+		self.layoutChanged()
 
 class AutosizedLayout(Layout):
 	def __init__(self, x, y):

@@ -5,30 +5,17 @@ from OpenGL.GL import *
 import pygame
 from pygame.locals import *
 import time
-from InputSource import InputSource
+from Container import Container
 from Signal import Signal
 from Config import config
 
-class MainLoop(InputSource):
+class MainLoop(Container):
 	"""
 	A class that has an event loop and manages a set of Actors
 	"""
 	def __init__(self):
-		InputSource.__init__(self)
-		self.drawBackground = Signal()
-		self.drawShadows = Signal()
-		self.draw = Signal()
-		self.drawOverlays = Signal()
-		self.actors = set()
+		Container.__init__(self)
 		self.delayFunc = None
-	
-	# TODO: rename to addActor
-	def add(self, actor):
-		self.actors.add(actor)
-	
-	# TODO: rename to removeActor
-	def remove(self, actor):
-		self.actors.remove(actor)
 	
 	def run(self):
 		"""
@@ -45,11 +32,14 @@ class MainLoop(InputSource):
 					self.quit()
 					break
 				elif event.type == MOUSEMOTION:
-					self.mouseMotion.emit(event)
+					for actor in set(self.actors):
+						actor.onMouseMotion(event)
 				elif event.type == MOUSEBUTTONDOWN:
-					self.mouseButtonDown.emit(event)
+					for actor in set(self.actors):
+						actor.onMouseButtonDown(event)
 				elif event.type == MOUSEBUTTONUP:
-					self.mouseButtonUp.emit(event)
+					for actor in set(self.actors):
+						actor.onMouseButtonUp(event)
 			
 			curTime = time.time()
 			deltaT = curTime - prevTime
@@ -58,10 +48,8 @@ class MainLoop(InputSource):
 			prevTime = curTime
 			
 			glClear(GL_COLOR_BUFFER_BIT)
-			self.drawBackground.emit()
-			self.drawShadows.emit()
-			self.draw.emit()
-			self.drawOverlays.emit()
+			for actor in self.actors:
+				actor.draw()
 			pygame.display.flip()
 			if self.delayFunc is not None:
 				self.delayFunc()
@@ -71,5 +59,8 @@ class MainLoop(InputSource):
 	
 	def quit(self):
 		self.__done = True
+
+# The singleton MainLoop object
+mainLoop = MainLoop()
 
 # vim: set ts=4 sts=4 sw=4 noet :

@@ -15,7 +15,7 @@ from Config import config
 from Actor import Actor
 #from RightTriGrid import RightTriGrid
 from Layout import ScrollableLayout, AutosizedLayout
-from MainLoop import MainLoop
+from MainLoop import mainLoop
 from Button import Button
 
 class VideoChooser:
@@ -112,14 +112,15 @@ if __name__ == '__main__':
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY)
 	glEnableClientState(GL_VERTEX_ARRAY)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+	glClearColor(0.5, 0.5, 0.5, 1.)
 	
-	main = MainLoop()
 	b = Button(
-		main, 200, 100,
+		mainLoop, 200, 100,
 		'<span size="xx-large" foreground="#ffe860">foobar</span>',
 		[ 0xff, 0xc0, 0x50 ])
+	b.clicked.addHandler(b.__class__.die, b)
 	
-	main.run()
+	mainLoop.run()
 	
 	sys.exit(0)
 	
