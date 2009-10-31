@@ -16,6 +16,7 @@ class Button(Actor):
 		self.pos = x, y
 		self.layout = AutosizedLayout(x, y)
 		self.layout.layout.set_markup(markup)
+		self.layout.setColor(color)
 		self.layout.layoutChanged()
 		
 		self.borderWidth = self.layout.size[1]/6
@@ -40,7 +41,7 @@ class Button(Actor):
 		self.hovering = nowHovering
 	
 	def onMouseButtonDown(self, event):
-		if self.contains(event.pos):
+		if self.contains(event.pos) and event.button == 1:
 			self.clicked.emit()
 	
 	def draw(self):
