@@ -60,6 +60,7 @@ class Layout:
 		# into
 		texWidth = nextPowerOf2(self.size[0])
 		texHeight = nextPowerOf2(self.size[1])
+		glBindTexture(GL_TEXTURE_2D, self.texture)
 		glTexImage2D(
 			GL_TEXTURE_2D, 0, GL_RGBA, texWidth, texHeight, 0, GL_BGRA,
 			GL_UNSIGNED_INT_8_8_8_8_REV, None)
@@ -107,6 +108,7 @@ class Layout:
 		glPushMatrix()
 		glLoadMatrixd(self.texMatrix)
 		
+		glBindTexture(GL_TEXTURE_2D, self.texture)
 		glTexCoordPointerd(self.texCoords)
 		glVertexPointerd(self.verts)
 		glDrawArrays(GL_QUADS, 0, 4)
@@ -168,9 +170,15 @@ class ScrollableLayout(Layout):
 		self.scrollAmount[0] += deltaX
 		self.scrollAmount[1] += deltaY
 		self.layoutChanged()
+
+	def scrollTo(self, x, y):
+		self.cairoCtx.identity_matrix()
+		self.cairoCtx.translate(-x, y)
+		self.scrollAmount = x, y
+		self.layoutChanged()
 	
 	def xy_to_index(self, x, y):
 		return Layout.xy_to_index(
 			self, x+self.scrollAmount[0], y+self.scrollAmount[1])
 
-# vim: set ts=4 sts=4 sw=4 noet :
+# vim: set ts=4 sts=4 sw=4 ai noet :
