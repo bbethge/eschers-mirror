@@ -121,8 +121,7 @@ class Layout:
 	
 	def xy_to_index(self, x, y):
 		index = self.layout.xy_to_index(
-			pango.SCALE * x,
-			pango.SCALE * (self.size[1]-y)) [0]
+			int(pango.SCALE * x), int(pango.SCALE * y)) [0]
 		if index < 0:
 			raise RuntimeError("Pango returned bad index")
 		return index
@@ -166,14 +165,14 @@ class ScrollableLayout(Layout):
 	def scroll(self, deltaX, deltaY):
 		# This depends on the fact that, unlike AutosizeLayout, we do not
 		# recreate our Cairo context after initialization
-		self.cairoCtx.translate(-deltaX, deltaY)
+		self.cairoCtx.translate(-deltaX, -deltaY)
 		self.scrollAmount[0] += deltaX
 		self.scrollAmount[1] += deltaY
 		self.layoutChanged()
 
 	def scrollTo(self, x, y):
 		self.cairoCtx.identity_matrix()
-		self.cairoCtx.translate(-x, y)
+		self.cairoCtx.translate(-x, -y)
 		self.scrollAmount = x, y
 		self.layoutChanged()
 	

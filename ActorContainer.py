@@ -21,7 +21,7 @@ class ActorContainer(Actor, Container):
 	def die(self):
 		# FIXME: awkward hack (?) to make sure actors clean up their signal
 		# handlers
-		for actor in self.actors:
+		for actor in set(self.actors):
 			actor.die()
 		Actor.die(self)
 
