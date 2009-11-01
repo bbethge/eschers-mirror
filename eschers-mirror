@@ -14,11 +14,14 @@ import bisect
 from Config import config
 from Actor import Actor
 #from RightTriGrid import RightTriGrid
-from Layout import ScrollableLayout, AutosizedLayout
+from Layout import ScrollableLayout
 from MainLoop import mainLoop
 from Button import Button
+from Scrollbar import Scrollbar
+from ScrolledText import ScrolledText
+from ActorContainer import ActorContainer
 
-class VideoChooser:
+class VideoChooser(ActorContainer):
 	"""
 	A screen that lets the user choose a video to play with.  The videos must be
 	stored under a directory which is supplied to __init__.
@@ -31,8 +34,12 @@ class VideoChooser:
 		def __cmp__(self, other):
 			return self.index - other.index
 	
-	def __init__(self, videoDir):
-		Stage.__init__(self)
+	def __init__(self, parent, pos, size, color, videoDir):
+		ActorContainer.__init__(self, parent)
+		self.color = color
+		self.pos = pos
+		self.size = size
+
 		fileNames = []
 		for root, dirs, dirFiles in os.walk(unicode(videoDir)):
 			fileNames += dirFiles
@@ -45,51 +52,91 @@ class VideoChooser:
 			index += len(fileName) + 1
 		self.files.append(self.File(index, None))
 		
-		self.layout = ScrollableLayout(0, 0, *config.window_size)
+		self.scrollbar = Scrollbar(self, pos, size[1], 1., color)
+		self.scrollbar.pos = (
+			self.pos[0]+self.size[0]-self.scrollbar.size[0], self.pos[1])
+
+		self.layout = ScrollableLayout(
+			pos[0], pos[1], self.size[0]-self.scrollbar.size[0], self.size[1])
 		self.layout.layout.set_text(filesStr)
-		layoutAttrs = pango.AttrList()
-		layoutAttrs.insert(
-			pango.AttrForeground(
-				0x8000, 0x8000, 0xff00, 0, len(filesStr)))
-		self.layout.layout.set_attributes(layoutAttrs)
-		self.layout.layoutChanged()
+		#layoutAttrs = pango.AttrList()
+		#layoutAttrs.insert(
+		#	pango.AttrForeground(
+		#		0x8000, 0x8000, 0xff00, 0, len(filesStr)))
+		#self.layout.layout.set_attributes(layoutAttrs)
+		#self.layout.layoutChanged()
+		self.layout.setColor(self.color)
+
+		self.listHeight = self.layout.layout.get_pixel_size()[1]
+		self.scrollbar.setPageSize(min(1., float(self.size[1])/self.listHeight))
+		self.scrollbar.scrolled.addHandler(
+			self.__class__.onScrollbarScrolled, self)
+
 		self.selectedIndex = 0  # Index in filesStr of currently selected option
-		
-		glClearColor(0.5, 0.0, 0.0, 1.0)
+
+	def die(self):
+		self.scrollbar.scrolled.removeHandler(
+			self.__class__.onScrollbarScrolled, self)
+		ActorContainer.die(self)
 	
 	def draw(self):
+		ActorContainer.draw(self)
+		glPushMatrix()
+		glTranslated(self.pos[0], self.pos[1], 0.)
 		self.layout.draw()
+		glPopMatrix()
+
+	def onScrollbarScrolled(self, amount):
+		self.layout.scroll(0, amount * (self.listHeight-self.size[1]))
 	
-	def handleEvent(self, event):
-		if event.type == KEYDOWN:
-			self.quit()
-		elif event.type == MOUSEMOTION:
-			index = self.layout.xy_to_index(
-				event.pos[0], config.window_size[1]-event.pos[1]-1)
-			filesIndex = (
-				bisect.bisect_right(self.files, self.File(index, None)) - 1)
-			start = self.files[filesIndex].index
-			if start != self.selectedIndex:
-				self.selectedIndex = start
-				end = self.files[filesIndex+1].index
-				layoutAttrs = pango.AttrList()
-				layoutAttrs.insert(
-					pango.AttrForeground(
-						0x8000, 0x8000, 0xff00, 0, self.files[-1].index))
-				layoutAttrs.insert(
-					pango.AttrForeground(0xffff, 0xffff, 0, start, end))
-				self.layout.layout.set_attributes(layoutAttrs)
-				self.layout.layoutChanged()
-		elif event.type == MOUSEBUTTONDOWN:
+	def onMouseMotion(self, event):
+		index = self.layout.xy_to_index(
+			event.pos[0]-self.pos[0], event.pos[1]-self.pos[1])
+		filesIndex = (
+			bisect.bisect_right(self.files, self.File(index, None)) - 1)
+		start = self.files[filesIndex].index
+		if start != self.selectedIndex:
+			self.selectedIndex = start
+			end = self.files[filesIndex+1].index
+			layoutAttrs = pango.AttrList()
+			layoutAttrs.insert(
+				pango.AttrForeground(
+					0x100*self.color[0], 0x100*self.color[1],
+					0x100*self.color[2], 0, self.files[-1].index))
+			layoutAttrs.insert(
+				pango.AttrBackground(
+					0x100*self.color[0], 0x100*self.color[1],
+					0x100*self.color[2], start, end))
+			layoutAttrs.insert(
+				pango.AttrForeground(0, 0, 0, start, end))
+			self.layout.layout.set_attributes(layoutAttrs)
+			self.layout.layoutChanged()
+	
+	def onMouseButtonDown(self, event):
+		if (
+				0 <= event.pos[0]-self.pos[0]
+					< self.size[0]-self.scrollbar.size[0]
+				and 0 <= event.pos[1]-self.pos[1] < self.size[1]):
 			if event.button == 4:  # scroll up
-				self.layout.scroll(0, self.scrollAmount)
+				dist = -min(
+					self.scrollbar.value * (self.listHeight-self.size[1]),
+					self.scrollAmount)
+				self.layout.scroll(0, dist)
+				self.scrollbar.value += (
+					float(dist) / (self.listHeight-self.size[1]))
 			elif event.button == 5:  # scroll down
-				self.layout.scroll(0, -self.scrollAmount)
+				dist = min(
+					(1.-self.scrollbar.value) * (self.listHeight-self.size[1]),
+					self.scrollAmount)
+				self.layout.scroll(0, dist)
+				self.scrollbar.value += (
+					float(dist) / (self.listHeight-self.size[1]))
 			elif event.button == 1:
-				index = self.layout.xy_to_index(*event.pos)
+				index = self.layout.xy_to_index(
+					event.pos[0]-self.pos[0], event.pos[1]-self.pos[1])
 				filesIndex = (
 					bisect.bisect_right(self.files, self.File(index, None)) - 1)
-				self.quit(self.files[filesIndex].name)
+				print self.files[filesIndex].name
 
 if __name__ == '__main__':
 	pygame.display.init()
@@ -115,10 +162,14 @@ if __name__ == '__main__':
 	glClearColor(0.5, 0.5, 0.5, 1.)
 	
 	b = Button(
-		mainLoop, 200, 100,
-		'<span size="xx-large" foreground="#ffe860">foobar</span>',
-		[ 0xff, 0xc0, 0x50 ])
-	b.clicked.addHandler(b.__class__.die, b)
+		mainLoop, 200, 100, '<span size="xx-large">foobar</span>',
+		[ 0xa0, 0xff, 0x90 ])
+	chooser = VideoChooser(
+		mainLoop, (100, 150), (200, 100), [ 0xa0, 0xff, 0x90 ],
+		config.video_dir)
+	s = ScrolledText(
+		mainLoop, (300, 200), (100, 100), [ 0xa0, 0xff, 0x90 ],
+		"This\nis\na\nvery\nlong\ntext\ndon't\nyou\nthink?")
 	
 	mainLoop.run()
 	
@@ -135,4 +186,4 @@ if __name__ == '__main__':
 	
 	config.write()
 
-# vim: set ts=4 sts=4 sw=4 noet :
+# vim: set ts=4 sts=4 sw=4 ai noet :

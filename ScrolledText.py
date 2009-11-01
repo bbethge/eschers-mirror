@@ -40,9 +40,9 @@ class ScrolledText(ActorContainer):
 		ActorContainer.die(self)
 
 	def onScrollbarScrolled(self, amount):
-		change = amount * (self.layoutHeight-self.size[1])
-		self.scrollPos += change
-		self.layout.scroll(0, -change)
+		dist = amount * (self.layoutHeight-self.size[1])
+		self.scrollPos += dist
+		self.layout.scroll(0, dist)
 	
 	def onMouseButtonDown(self, event):
 		if (
@@ -53,13 +53,13 @@ class ScrolledText(ActorContainer):
 					self.layoutHeight-self.scrollPos-self.size[1],
 					self.scrollAmount)
 				self.scrollPos += amount
-				self.layout.scroll(0, -amount)
+				self.layout.scroll(0, amount)
 				self.scrollbar.value = (
 					float(self.scrollPos) / (self.layoutHeight-self.size[1]))
 			elif event.button == 4:  # Scroll up
 				amount = min(self.scrollPos, self.scrollAmount)
 				self.scrollPos -= amount
-				self.layout.scroll(0, amount)
+				self.layout.scroll(0, -amount)
 				self.scrollbar.value = (
 					float(self.scrollPos) / (self.layoutHeight-self.size[1]))
 
