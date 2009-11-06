@@ -17,6 +17,18 @@ class ActorContainer(Actor, Container):
 	def draw(self):
 		for actor in self.actors:
 			actor.draw()
+
+	def onMouseMotion(self, event):
+		for actor in self.actors:
+			actor.onMouseMotion(event)
+	
+	def onMouseButtonDown(self, event):
+		for actor in self.actors:
+			actor.onMouseButtonDown(event)
+	
+	def onMouseButtonUp(self, event):
+		for actor in self.actors:
+			actor.onMouseButtonUp(event)
 	
 	def die(self):
 		# FIXME: awkward hack (?) to make sure actors clean up their signal

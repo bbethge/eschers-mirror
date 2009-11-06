@@ -6,11 +6,8 @@ import numpy as np
 from Layout import AutosizedLayout
 from Actor import Actor
 from Signal import Signal
-from MainLoop import mainLoop
 
 class Button(Actor):
-	texCoords = np.array([[0.25], [0.75]]*5, np.double)
-	
 	def __init__(self, parent, x, y, markup, color):
 		Actor.__init__(self, parent)
 		self.pos = x, y
@@ -20,17 +17,18 @@ class Button(Actor):
 		self.layout.layoutChanged()
 		
 		self.borderWidth = self.layout.size[1]/6
+		self.size = (
+			self.layout.size[0] + 2*self.borderWidth,
+			self.layout.size[1] + 2*self.borderWidth)
 		self.color = color
 	
 		self.hovering = False
 		self.clicked = Signal()
-	
+
 	def contains(self, pos):
 		return (
-			0 <= pos[0]-self.pos[0]
-				< self.layout.size[0]+2*self.borderWidth
-			and 0 <= pos[1]-self.pos[1]
-				< self.layout.size[1]+2*self.borderWidth)
+			0 <= pos[0]-self.pos[0] < self.size[0]
+			and 0 <= pos[1]-self.pos[1] < self.size[1])
 	
 	def onMouseMotion(self, event):
 		nowHovering = self.contains(event.pos)
@@ -62,4 +60,4 @@ class Button(Actor):
 		glDisable(GL_BLEND)
 		glPopMatrix()
 
-# vim: set ts=4 sts=4 sw=4 noet :
+# vim: set ts=4 sts=4 sw=4 ai noet :
