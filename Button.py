@@ -1,63 +1,38 @@
-import OpenGL
-#OpenGL.ERROR_CHECKING = False
-OpenGL.ERROR_ON_COPY = True
-from OpenGL.GL import *
-import numpy as np
-from Layout import AutosizedLayout
-from Actor import Actor
-from Signal import Signal
+import clutter
+import gobject
 
-class Button(Actor):
-	def __init__(self, parent, x, y, markup, color):
-		Actor.__init__(self, parent)
-		self.pos = x, y
-		self.layout = AutosizedLayout(x, y)
-		self.layout.layout.set_markup(markup)
-		self.layout.setColor(color)
-		self.layout.layoutChanged()
+@gobject.type_register
+class Button(clutter.Group):
+	def __init__(self, text, color):
+		clutter.Group.__init__(self)
+		self.set_reactive(True)
 		
-		self.borderWidth = self.layout.size[1]/6
-		self.size = (
-			self.layout.size[0] + 2*self.borderWidth,
-			self.layout.size[1] + 2*self.borderWidth)
+		self.highlight = clutter.Rectangle()
+		self.add(self.highlight)
+		self.highlight.set_color(clutter.Color(0, 0, 0, 0x80))
+		
+		self.text = clutter.Text()
+		self.text.set_text(text)
+		self.text.set_color(color)
+		self.add(self.text)
+		
+		border_width = self.text.get_height() / 6.
+		self.highlight.set_size(
+			self.text.get_width() + 2*border_width,
+			self.text.get_height() + 2*border_width)
+		self.text.set_position(border_width, border_width)
+		
 		self.color = color
+		
+		self.connect('enter-event', self.enter_cb)
+		self.connect('leave-event', self.leave_cb)
 	
-		self.hovering = False
-		self.clicked = Signal()
-
-	def contains(self, pos):
-		return (
-			0 <= pos[0]-self.pos[0] < self.size[0]
-			and 0 <= pos[1]-self.pos[1] < self.size[1])
+	def enter_cb(self, event, data):
+		self.highlight.set_color(self.color)
+		self.text.set_color(clutter.Color(0, 0, 0, 0xff))
 	
-	def onMouseMotion(self, event):
-		nowHovering = self.contains(event.pos)
-		if self.hovering and not nowHovering:
-			self.layout.setColor(self.color)
-		elif not self.hovering and nowHovering:
-			self.layout.setColor( (0, 0, 0) )
-		self.hovering = nowHovering
-	
-	def onMouseButtonDown(self, event):
-		if self.contains(event.pos) and event.button == 1:
-			self.clicked.emit()
-	
-	def draw(self):
-		glPushMatrix()
-		glTranslated(self.pos[0], self.pos[1], 0.)
-		glEnable(GL_BLEND)
-		glDisable(GL_TEXTURE_2D)
-		if self.hovering:
-			glColor4ub(self.color[0], self.color[1], self.color[2], 150)
-		else:
-			glColor4ub(0, 0, 0, 150)
-		glRectd(
-			0, 0, self.layout.size[0]+2*self.borderWidth,
-			self.layout.size[1]+2*self.borderWidth)
-		glEnable(GL_TEXTURE_2D)
-		glTranslated(self.borderWidth, self.borderWidth, 0)
-		self.layout.draw()
-		glDisable(GL_BLEND)
-		glPopMatrix()
+	def leave_cb(self, event, data):
+		self.highlight.set_color(clutter.Color(0, 0, 0, 0x80))
+		self.text.set_color(self.color)
 
 # vim: set ts=4 sts=4 sw=4 ai noet :
