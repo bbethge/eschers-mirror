@@ -1,5 +1,9 @@
 import clutter
+from clutter import cogl
 import gobject
+import pango
+from Config import config
+from RoundedRectangle import RoundedRectangle
 
 @gobject.type_register
 class Button(clutter.Group):
@@ -7,20 +11,26 @@ class Button(clutter.Group):
 		clutter.Group.__init__(self)
 		self.set_reactive(True)
 		
-		self.highlight = clutter.Rectangle()
-		self.add(self.highlight)
-		self.highlight.set_color(clutter.Color(0, 0, 0, 0x80))
-		
 		self.text = clutter.Text()
 		self.text.set_text(text)
 		self.text.set_color(color)
+		attrs = pango.AttrList()
+		attrs.insert(
+			pango.AttrSize(int(1000*config.em), 0, len(self.text.get_text())))
+		self.text.set_attributes(attrs)
 		self.add(self.text)
-		
-		border_width = self.text.get_height() / 6.
-		self.highlight.set_size(
-			self.text.get_width() + 2*border_width,
-			self.text.get_height() + 2*border_width)
-		self.text.set_position(border_width, border_width)
+
+		self.border_width = self.text.get_height()/4.
+		self.text.set_position(self.border_width, self.border_width)
+
+		self.background = RoundedRectangle()
+		self.background.set_size(
+			self.text.get_width()+2*self.border_width,
+			self.text.get_height()+2*self.border_width)
+		self.background.set_corner_size(2*self.border_width)
+		self.background.set_color(clutter.Color(0, 0, 0, 0x80))
+		self.add(self.background)
+		self.background.lower_bottom()
 		
 		self.color = color
 		
@@ -28,11 +38,11 @@ class Button(clutter.Group):
 		self.connect('leave-event', self.leave_cb)
 	
 	def enter_cb(self, event, data):
-		self.highlight.set_color(self.color)
+		self.background.set_color(self.color)
 		self.text.set_color(clutter.Color(0, 0, 0, 0xff))
 	
 	def leave_cb(self, event, data):
-		self.highlight.set_color(clutter.Color(0, 0, 0, 0x80))
+		self.background.set_color(clutter.Color(0, 0, 0, 0x80))
 		self.text.set_color(self.color)
 
 # vim: set ts=4 sts=4 sw=4 ai noet :

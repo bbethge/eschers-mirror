@@ -25,6 +25,11 @@ class Config:
 		except IOError:
 			pass
 		self.__config.update(config)
+
+		# A scale that is used to determine the size of everything that isn't
+		# naturally determined by the window size.  Should be the height of
+		# standard text.
+		self.em = self.window_size[1] / 48.
 	
 	def __getattr__(self, name):
 		return self.__config[name]
