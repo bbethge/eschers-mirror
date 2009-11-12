@@ -2,6 +2,7 @@ import gobject
 import clutter
 import pango
 from RoundedRectangle import RoundedRectangle
+from Scrollbar import Scrollbar
 from Config import config
 
 @gobject.type_register
@@ -15,6 +16,7 @@ class ListItem(clutter.Group):
 
 		self.label = clutter.Text()
 		self.label.set_text(text)
+		self.label.set_ellipsize(pango.ELLIPSIZE_END)
 		self.label.set_color(color)
 		attrs = pango.AttrList()
 		attrs.insert(
@@ -51,18 +53,18 @@ class ListItem(clutter.Group):
 			self.highlight.hide()
 
 	def set_width(self, width):
-		self.label.set_clip(
-			0, 0, width-self.border_width, self.label.get_height())
+		self.label.set_width(width-2*self.border_width)
 		self.highlight.set_width(width)
 
 	def get_text(self):
 		return self.label.get_text()
 
 	def select(self):
-		self.highlight.set_filled(True)
-		self.label.set_color(clutter.Color(0, 0, 0, 0xff))
-		self.selected = True
-		self.emit('selected')
+		if not self.selected:
+			self.highlight.set_filled(True)
+			self.label.set_color(clutter.Color(0, 0, 0, 0xff))
+			self.selected = True
+			self.emit('selected')
 	
 	def deselect(self):
 		self.highlight.set_filled(False)
@@ -82,29 +84,36 @@ class ListSelector(clutter.Group):
 		self.items = []
 		y = 0.
 		for name in items:
-			new_item = ListItem(name, width, color)
+			new_item = ListItem(name, width-self.scrollbar.get_width(), color)
 			new_item.connect('selected', self.item_selected_cb)
 			self.items.append(new_item)
 			self.add(new_item)
 			new_item.set_position(0, y)
 			y += new_item.get_height()
 		
+		self.scrollbar = Scrollbar()
+		self.scrollbar.set_color(color)
+		self.scrollbar.set_page_size(0.5)
+		self.add(self.scrollbar)
+		self.scrollbar.set_position(width-self.scrollbar.get_width(), 0)
+
 		self.selected = None
 		self.color = color
 	
 	def set_size(self, width, height):  
 		self.background.set_size(width, height)
+		self.scrollbar.set_position(width-self.scrollbar.get_width(), 0)
+		self.scrollbar.set_height(height)
 		self.set_clip(0, 0, width, height)
 		for item in self.items:
-			item.set_width(width)
+			item.set_width(width-self.scrollbar.get_width())
 	
 	def get_selected(self):
 		return self.selected
 	
 	def item_selected_cb(self, selected):
-		for item in self.items:
-			if item is not selected:
-				item.deselect()
+		if self.selected is not None:
+			self.selected.deselect()
 		self.selected = selected
 
 # vim: set ts=4 sts=4 sw=4 ai noet :

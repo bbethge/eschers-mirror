@@ -31,7 +31,7 @@ class MenuGroup(clutter.Group):
 		
 		Returns: the timeline of the animation
 		"""
-		timeline = clutter.Timeline(500)
+		timeline = clutter.Timeline(200)
 		alpha = clutter.Alpha(timeline, clutter.LINEAR)
 		
 		x, y = self.get_position()

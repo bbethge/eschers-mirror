@@ -1,102 +1,124 @@
-import OpenGL
-#OpenGL.ERROR_CHECKING = False
-OpenGL.ERROR_ON_COPY = True
-from OpenGL.GL import *
-import numpy as np
-import pygame
-from Actor import Actor
+import gobject
+import clutter
+from clutter import cogl
 from Config import config
-from Signal import Signal
+from RoundedRectangle import RoundedRectangle
 
-class Scrollbar(Actor):
+@gobject.type_register
+class Triangle(clutter.Rectangle):
+
+	def do_paint(self):
+		color = self.get_color()
+		x1, y1, x2, y2 = self.get_allocation_box()
+		width, height = x2-x1, y2-y1
+
+		cogl.set_source_color4ub(
+			color.red, color.green, color.blue,
+			color.alpha * self.get_paint_opacity() / 255)
+		cogl.path_move_to(0, height)
+		cogl.path_line_to(width, height)
+		cogl.path_line_to(width/2., 0)
+		cogl.path_close()
+		cogl.path_fill()
+
+@gobject.type_register
+class Scrollbar(clutter.Group):
+	__gsignals__ = {
+		'scrolled': (
+			gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+			(gobject.TYPE_DOUBLE,)) }
+
+	arrow_aspect = 1.
+	max_slider_aspect = 1.
 	
-	def __init__(self, parent, pos, height, pageSize, color, initVal=0.):
-		"""
-		height: height of the scrollbar in pixels
-		pageSize: size of the slider, as a fraction of the total length
-		self.value is the current value of the scrollbar on a scale of 0 to 1.
-		self.pos, self.color, and self.value can be written at any time.
-		"""
-		Actor.__init__(self, parent)
-		self.value = initVal
-		self.pos = pos
-		self.size = config.window_size[0]/48, height
-		self.arrowLength = self.size[0]
-		self.color = color
-		self.setPageSize(pageSize)
-		w, h = self.size
-		a = self.arrowLength
-		self.verts = np.array(
-			[
-				[ w/2., 0. ],
-				[ 0., a ],
-				[ w, a ],
+	def __init__(self):
+		clutter.Group.__init__(self)
+
+		self.up_arrow = Triangle()
+		self.add(self.up_arrow)
+		self.up_arrow.set_reactive(True)
+		self.up_arrow.connect(
+			'button-press-event',
+			lambda e,d: self.set_value(self.value-self.page_size/5.))
+
+		self.down_arrow = Triangle()
+		self.add(self.down_arrow)
+		self.down_arrow.set_reactive(True)
+		self.down_arrow.connect(
+			'button-press-event',
+			lambda e,d: self.set_value(self.value+self.page_size/5.))
+
+		self.line = clutter.Rectangle()
+		self.add(self.line)
+
+		self.slider = RoundedRectangle()
+		self.add(self.slider)
+
+		self.arrow_height = 1.
+		self.value = 0.
+		self.page_size = 1.
+
+	def set_color(self, color):
+		self.foreach(lambda a, n: a.set_color(color), None)
+
+	def get_value(self):
+		return self.value
+
+	def set_value(self, value):
+		new_value = max(0., min(value, 1.))
+		if new_value != self.value:
+			change = new_value - self.value
+			self.value = new_value
+			self.queue_relayout()
+			self.emit('scrolled', change)
+
+	def set_page_size(self, page_size):
+		self.page_size = page_size
+		self.queue_relayout()
+
+	def do_get_preferred_width(self, for_height):
+		return 3, config.em
 	
-				[ w*0.4, a ],
-				[ w*0.6, a ],
-				[ w*0.6, h-a ],
+	def do_get_preferred_height(self, for_width):
+		return (
+			for_width * (2*self.arrow_aspect+self.max_slider_aspect) + 1,
+			for_width * (2*self.arrow_aspect+2*self.max_slider_aspect))
 	
-				[ w*0.4, a ],
-				[ w*0.6, h-a ],
-				[ w*0.4, h-a ],
-	
-				[ 0., h-a ],
-				[ w, h-a ],
-				[ w/2., h ]
-			], np.double)
-		self.scrolled = Signal()
-	
-	def setPageSize(self, pageSize):
-		self.sliderHeight = (
-			max(self.size[0], pageSize*(self.size[1]-2*self.arrowLength)))
-		self.pageSize = pageSize
-		w, h = self.size
-		s = self.sliderHeight
-		self.sliderVerts = np.array(
-			[
-				[ w*0.1, w/2. ],
-				[ w*0.1, s-w/2. ],
-				[ w/2., 0. ],
-				[ w/2., s ],
-				[ w*0.9, w/2. ],
-				[ w*0.9, s-w/2 ]
-			], np.double)
-	
-	def draw(self):
-		glPushMatrix()
-		glTranslated(self.pos[0], self.pos[1], 0.)
-		glDisableClientState(GL_TEXTURE_COORD_ARRAY)
-		glDisable(GL_TEXTURE_2D)
-		glColor3ub(*self.color)
-		glEnable(GL_BLEND)
-		glEnable(GL_POLYGON_SMOOTH)
-		glVertexPointerd(self.verts)
-		glDrawArrays(GL_TRIANGLES, 0, len(self.verts))
-		glTranslated(
-			0.,
-			self.arrowLength
-				+ self.value*(self.size[1]-2.*self.size[0]-self.sliderHeight),
-			0.)
-		glVertexPointerd(self.sliderVerts)
-		glDrawArrays(GL_QUAD_STRIP, 0, len(self.sliderVerts))
-		glDisable(GL_POLYGON_SMOOTH)
-		glDisable(GL_BLEND)
-		glEnable(GL_TEXTURE_2D)
-		glEnableClientState(GL_TEXTURE_COORD_ARRAY)
-		glPopMatrix()
-	
-	def update(self, deltaT):
-		mousePos = pygame.mouse.get_pos()
-		if (
-				pygame.mouse.get_pressed()[0] and
-				0 <= mousePos[0]-self.pos[0] < self.size[0]):
-			if 0 <= mousePos[1]-self.pos[1] < self.arrowLength:
-				oldVal = self.value
-				self.value = max(0., self.value-self.pageSize*deltaT)
-				self.scrolled.emit(self.value-oldVal)
-			elif -self.arrowLength <= mousePos[1]-self.pos[1]-self.size[1] < 0:
-				oldVal = self.value
-				self.value = min(1., self.value+self.pageSize*deltaT)
-				self.scrolled.emit(self.value-oldVal)
+	def do_allocate(self, box, flags):
+		x, y = box.origin
+		width, height = box.size
+
+		self.arrow_height = width/self.arrow_aspect
+		line_width = width/10.
+
+		# For some reason this doesn't work if we give parent-relative
+		# coordinates
+		self.up_arrow.allocate(
+			clutter.ActorBox(x, y, x+width, y+self.arrow_height), flags)
+		self.down_arrow.allocate(
+			clutter.ActorBox(x, y+height-self.arrow_height, x+width, y+height),
+			flags)
+		self.line.allocate(
+			clutter.ActorBox(
+				x+width/2.-line_width/2., y+self.arrow_height,
+				x+width/2.+line_width/2., y+height-self.arrow_height),
+			flags)
+
+		slider_height = max(
+			self.page_size * (height-2*self.arrow_height),
+			width * self.max_slider_aspect)
+		self.slider.allocate(
+			clutter.ActorBox(
+				x,
+				y + self.arrow_height
+					+ self.value * (height-2*self.arrow_height-slider_height),
+				x + width,
+				y + self.arrow_height + slider_height
+					+ self.value * (height-2*self.arrow_height-slider_height)),
+			flags)
+		self.slider.set_corner_size(width/2.)
+
+		self.down_arrow.set_rotation(
+			clutter.Z_AXIS, 180, width/2., self.arrow_height/2., 0.)
 
 # vim: set ts=4 sts=4 sw=4 ai noet :
