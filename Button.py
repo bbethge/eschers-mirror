@@ -6,6 +6,8 @@ from Config import config
 
 class Button(clutter.Actor, clutter.Container):
 	__gtype_name__ = 'Button'
+	__gsignals__ = {
+		'clicked': (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, ()) }
 
 	padding_ratio = 1./4.
 
@@ -24,6 +26,7 @@ class Button(clutter.Actor, clutter.Container):
 
 		self.connect('enter-event', self.__class__.on_enter)
 		self.connect('leave-event', self.__class__.on_leave)
+		self.connect('button-press-event', self.__class__.on_button_press)
 
 	def do_add(self, *children):
 		for child in children:
@@ -103,6 +106,9 @@ class Button(clutter.Actor, clutter.Container):
 		self.highlighted = False
 		# HACK
 		self._child.set_color(self.color)
+
+	def on_button_press(self, event):
+		self.emit('clicked')
 
 	def do_paint(self):
 		x1, y1, x2, y2 = self.get_allocation_box()
