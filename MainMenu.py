@@ -21,16 +21,16 @@ class MainMenu(clutter.Group):
 		start = Button("Start", color)
 		self.add(start)
 		start.set_position(stage_w/2.-start.get_width()/2., stage_h/2.)
-		start.connect('button-press-event', lambda e,d: group.move(-1,0))
+		start.connect('clicked', lambda b: group.move(-1,0))
 		
 		quit = Button("Quit", color)
 		self.add(quit)
 		quit.set_position(
 			stage_w/2.-quit.get_width()/2., stage_h/2.+start.get_height()*1.3)
 		
-		quit.connect('button-press-event', self.on_quit_clicked)
+		quit.connect('clicked', self.on_quit_clicked)
 		
-	def on_quit_clicked(self, event, data):
+	def on_quit_clicked(self, button):
 		timeline = self.group.move(0, 1)
 		timeline.connect('completed', clutter.main_quit)
 

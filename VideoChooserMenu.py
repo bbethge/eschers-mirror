@@ -23,6 +23,6 @@ class VideoChooserMenu(clutter.Group):
 		back.set_reactive(True)
 		self.add(back)
 		back.set_position(0, group.stage.get_height()-back.get_height())
-		back.connect('button-press-event', lambda e,d: group.move(1,0))
+		back.connect('clicked', lambda b: group.move(1,0))
 
 # vim: set ts=4 sts=4 sw=4 ai noet :
