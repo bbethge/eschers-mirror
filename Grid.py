@@ -1,60 +1,57 @@
-#!/usr/bin/env python
-
-import OpenGL
-#OpenGL.ERROR_CHECKING = False
-OpenGL.ERROR_ON_COPY = True
-from OpenGL.GL import *
-import pygame
-from pygame.locals import *
-import os
-import numpy as np
-import sys
-from glob import glob
-sys.path += glob(os.path.join('build', '*', ''))
-import VideoDecode
+import gobject
+import clutter
+from clutter import cogl
+import cluttergst
+import gst
 import time
-import bisect
 from Config import config
-from Signal import Signal
-from Actor import Stage
-from TimeDisplay import TimeDisplay
 
-class Grid(Stage):
+class Grid(clutter.Actor):
 	"""
 	The base class for all grid types, which manage the state of a puzzle.
-	
-	Data members:
-	vidSize: the pixel size of the video as it appears on-screen
-	vidOrigin: the window coordinates of the origin (lower left) of where the 
-	           video will be drawn
-	vidAspect: the aspect ratio the video should be displayed at
-	srcVidSize: the pixel size of the source video, which is stored in a texture
-	vidTex: the texture object holding the current video frame
 	"""
-	def __init__(self, videoFile):
-		Stage.__init__(self)
-		glClearColor(0.0, 0.0, 0.0, 1.0)
-		# Set up vidTex
-		self.vidTex = glGenTextures(1)
-		glBindTexture(GL_TEXTURE_2D, self.vidTex)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-		
-		VideoDecode.init(
-			os.path.join(os.path.expanduser('~'), '.xine', 'config'),
-			videoFile)
-		self.vidSize = 1, 1
-		self.vidAspect = 1.
-		self.vidOrigin = 0, 0
-		self.srcVidSize = 1, 1
-		self.drawFixedTiles = Signal()
-		self.drawFlyingTiles = Signal()
-		self.drawOverlays = Signal()
-		self.startGrab = Signal()
-		self.endGrab = Signal()
-		self.rotateTile = Signal()
+
+	__gtype_name__ = 'Grid'
+
+	def __init__(self, videoUri):
+		clutter.Actor.__init__(self)
+		self.clutter_texture = cluttergst.VideoTexture()
+		self.clutter_texture.set_sync_size(True)
+		# HACK to make clutter_texture.get_preferred_* work
+		self.clutter_texture.set_parent(self)
+		self.clutter_texture.connect('pixbuf-change', self.on_pixbuf_change)
+
+		self.playbin = self.clutter_texture.get_playbin()
+		self.playbin.props.uri = videoUri
 	
+	def start(self):
+		self.playbin.set_state(gst.STATE_PLAYING)
+
+	def get_material(self):
+		return self.clutter_texture.get_cogl_material()
+
+	def on_pixbuf_change(self, texture):
+		self.queue_redraw()
+
+	def do_get_preferred_width(self, for_height):
+		texture_width = self.clutter_texture.get_preferred_width(-1)[1]
+		texture_height = self.clutter_texture.get_preferred_height(-1)[1]
+
+		if for_height > 0:
+			return 1, float(texture_width) / texture_height * for_height
+		else:
+			return 1, texture_width
+
+	def do_get_preferred_height(self, for_width):
+		texture_width = self.clutter_texture.get_preferred_width(-1)[1]
+		texture_height = self.clutter_texture.get_preferred_height(-1)[1]
+
+		if for_width > 0:
+			# FIXME: texture_width == 0 ?!
+			return 1, float(texture_height) / texture_width * for_width
+		else:
+			return 1, texture_height
+
 	def run(self):
 		"""
 		Run the main event loop for the puzzle.  This will not return until the 
@@ -192,4 +189,4 @@ class Grid(Stage):
 		"""
 		return self.transformMousePos(*pygame.mouse.get_pos())
 
-# vim: set ts=4 sts=4 sw=4 noet :
+# vim: set ts=4 sts=4 sw=4 ai noet :

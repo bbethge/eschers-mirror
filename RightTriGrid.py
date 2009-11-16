@@ -1,45 +1,19 @@
-import OpenGL
-#OpenGL.ERROR_CHECKING = False
-OpenGL.ERROR_ON_COPY = True
-from OpenGL.GL import *
-import pygame
-from pygame.locals import *
-import numpy as np
+import clutter
 from math import *  # math is delicious
 import random
-from Signal import Signal
-from Actor import Actor, Stage
 from Grid import Grid
 
-class RightTriGrid(Grid):
+class RightTriGrid(Grid, clutter.Container):
 	def __init__(self, videoFile, rows, cols):
 		Grid.__init__(self, videoFile)
 		self.cols = cols
 		self.rows = rows
-		self.tiles = set()
+		self.tiles = []
 		import itertools
 		for loc in itertools.product(range(cols), range(rows), range(2)):
-			self.tiles.add(RightTriTile(self, loc))
+			self.tiles.append(RightTriTile(self, loc))
 		self.grabbedTile = None
 		self.shuffle()
-	
-	def draw(self):
-		self.drawFixedTiles.emit(self.vidAspect)
-		self.drawFlyingTiles.emit(self.vidAspect)
-	
-	def findTile(self, pos):
-		"""
-		Find the location (col, row, idx) of the tile at video coordinates pos
-		"""
-		col = int(self.cols*pos[0]/self.vidSize[0])
-		row = int(self.rows*pos[1]/self.vidSize[1])
-		cellX = float(self.cols*pos[0])/self.vidSize[0] - col
-		cellY = float(self.rows*pos[1])/self.vidSize[1] - row
-		if cellX + cellY < 1.:
-			idx = 0
-		else:
-			idx = 1
-		return col, row, idx
 	
 	def isSolved(self):
 		for tile in self.tiles:

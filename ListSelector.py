@@ -132,7 +132,7 @@ class ListItem(clutter.Actor, clutter.Container):
 			self._child.paint()
 
 	def get_text(self):
-		return self.label.get_text()
+		return self._child.get_text()
 
 	def select(self):
 		if not self.selected:
@@ -236,8 +236,14 @@ class ListSelector(clutter.Actor, clutter.Container):
 			child.paint()
 	
 	def get_selected(self):
-		return self.selected
-	
+		return self.selected.get_text()
+
+	def set_selected(self, name):
+		for child in self._children:
+			if child.get_text() == name:
+				child.select()
+				break
+
 	def item_selected_cb(self, selected):
 		if self.selected is not None:
 			self.selected.deselect()
