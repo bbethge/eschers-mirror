@@ -23,14 +23,16 @@ class VideoChooserMenu(clutter.Group):
 		self.chooser.set_size(100, group.stage.get_height()/2.)
 		self.chooser.set_selected(file_names[0])
 		
-		back = Button("Back", color)
-		back.set_reactive(True)
+		back = Button()
+		back.set_text("Back")
+		back.set_color(color)
 		self.add(back)
 		back.set_position(0, group.stage.get_height()-back.get_height())
 		back.connect('clicked', lambda b: group.move(1,0))
 
-		go = Button("Go", color)
-		go.set_reactive(True)
+		go = Button()
+		go.set_text("Go")
+		go.set_color(color)
 		self.add(go)
 		go.set_position(
 			group.stage.get_width() - go.get_width(),
@@ -42,8 +44,7 @@ class VideoChooserMenu(clutter.Group):
 
 	def start_video(self, timeline):
 		filename = os.path.join(config.video_dir, self.chooser.get_selected())
-		uri = 'file://' + filename.replace(os.sep, '/')
-		grid = RectGrid(uri, 3, 4)
+		grid = RectGrid(filename, 3, 4)
 		self.group.add(grid)
 		grid.set_x(2*self.group.stage.get_width())
 		grid.start()

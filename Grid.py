@@ -13,19 +13,17 @@ class Grid(clutter.Actor):
 
 	__gtype_name__ = 'Grid'
 
-	def __init__(self, videoUri):
+	def __init__(self, video_file):
 		clutter.Actor.__init__(self)
 		self.clutter_texture = cluttergst.VideoTexture()
 		self.clutter_texture.set_sync_size(True)
-		# HACK to make clutter_texture.get_preferred_* work
+		# HACK to make clutter_texture.get_preferred_{width,height} work
 		self.clutter_texture.set_parent(self)
 		self.clutter_texture.connect('pixbuf-change', self.on_pixbuf_change)
+		self.clutter_texture.set_filename(video_file)
 
-		self.playbin = self.clutter_texture.get_playbin()
-		self.playbin.props.uri = videoUri
-	
 	def start(self):
-		self.playbin.set_state(gst.STATE_PLAYING)
+		self.clutter_texture.set_playing(True)
 
 	def get_material(self):
 		return self.clutter_texture.get_cogl_material()

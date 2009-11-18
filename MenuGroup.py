@@ -12,17 +12,19 @@ class MenuGroup(clutter.Group):
 		stage: the stage we belong to
 	"""
 	
-	def __init__(self, stage, color):
+	def __init__(self, color):
 		clutter.Group.__init__(self)
-		self.stage = stage
 		
-		main = MainMenu(self, color)
-		self.add(main)
-		main.set_position(0, 0)
+		self.main = MainMenu(self, color)
+		self.add(self.main)
 		
-		chooser = VideoChooserMenu(self, color)
-		self.add(chooser)
-		chooser.set_position(stage.get_width(), 0)
+		#self.chooser = VideoChooserMenu(self, color)
+		#self.add(self.chooser)
+
+	def do_parent_set(self, old_parent):
+		self.main.set_position(0, 0)
+		#self.chooser.set_position(self.get_parent().get_width(), 0)
+		self.stage = self.get_parent()
 	
 	def move(self, x_amount, y_amount):
 		"""
