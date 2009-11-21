@@ -6,12 +6,15 @@ import os
 from Button import Button
 from ListSelector import ListSelector
 from RectGrid import RectGrid
+from BoxLayout import BoxLayout
 from Config import config
 
-@gobject.type_register
-class VideoChooserMenu(clutter.Group):
+class VideoChooserMenu(BoxLayout):
+	__gtype_name__ = 'VideoChooserMenu'
+
 	def __init__(self, group, color):
-		clutter.Group.__init__(self)
+		BoxLayout.__init__(self)
+		self.set_orientation(BoxLayout.VERTICAL)
 		self.group = group
 		self.color = color
 		
@@ -20,23 +23,27 @@ class VideoChooserMenu(clutter.Group):
 			file_names += dir_files
 		self.chooser = ListSelector(file_names, 100, color)
 		self.add(self.chooser)
-		self.chooser.set_size(100, group.stage.get_height()/2.)
+		#self.chooser.set_size(100, group.stage.get_height()/2.)
 		self.chooser.set_selected(file_names[0])
 		
+		#self.hbox = BoxLayout()
+		#self.hbox.set_orientation(BoxLayout.HORIZONTAL)
+		#self.add(self.hbox)
+
 		back = Button()
 		back.set_text("Back")
 		back.set_color(color)
 		self.add(back)
-		back.set_position(0, group.stage.get_height()-back.get_height())
+		#back.set_position(0, group.stage.get_height()-back.get_height())
 		back.connect('clicked', lambda b: group.move(1,0))
 
 		go = Button()
 		go.set_text("Go")
 		go.set_color(color)
 		self.add(go)
-		go.set_position(
-			group.stage.get_width() - go.get_width(),
-			group.stage.get_height() - go.get_height())
+		#go.set_position(
+		#	group.stage.get_width() - go.get_width(),
+		#	group.stage.get_height() - go.get_height())
 		go.connect('clicked', self.on_go_clicked)
 
 	def on_go_clicked(self, button):

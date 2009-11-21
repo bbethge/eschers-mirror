@@ -2,6 +2,7 @@ import clutter
 import gobject
 from MainMenu import MainMenu
 from VideoChooserMenu import VideoChooserMenu
+from Frame import Frame
 
 @gobject.type_register
 class MenuGroup(clutter.Group):
@@ -14,17 +15,26 @@ class MenuGroup(clutter.Group):
 	
 	def __init__(self, color):
 		clutter.Group.__init__(self)
+
+		self.main_frame = Frame()
+		self.add(self.main_frame)
 		
 		self.main = MainMenu(self, color)
-		self.add(self.main)
+		self.main_frame.add(self.main)
 		
-		#self.chooser = VideoChooserMenu(self, color)
-		#self.add(self.chooser)
+		self.chooser_frame = Frame()
+		self.add(self.chooser_frame)
+
+		self.chooser = VideoChooserMenu(self, color)
+		self.chooser_frame.add(self.chooser)
 
 	def do_parent_set(self, old_parent):
-		self.main.set_position(0, 0)
-		#self.chooser.set_position(self.get_parent().get_width(), 0)
 		self.stage = self.get_parent()
+
+		self.main_frame.set_position(0, 0)
+		self.chooser_frame.set_position(self.stage.get_width(), 0)
+		self.main_frame.set_size(*self.stage.get_size())
+		self.chooser_frame.set_size(*self.stage.get_size())
 	
 	def move(self, x_amount, y_amount):
 		"""
