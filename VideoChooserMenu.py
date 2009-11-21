@@ -1,7 +1,4 @@
-import gobject
 import clutter
-import cluttergst
-import gst
 import os
 from Button import Button
 from ListSelector import ListSelector
@@ -24,19 +21,18 @@ class VideoChooserMenu(BoxLayout):
 			file_names += dir_files
 		self.chooser = ListSelector(file_names, 100, color)
 		self.add(self.chooser)
-		#self.chooser.set_size(100, group.stage.get_height()/2.)
 		self.chooser.set_selected(file_names[0])
+
+		self.pack(Frame(), expand=True, fill=True)
 		
 		self.hbox = BoxLayout()
 		self.hbox.set_orientation(BoxLayout.HORIZONTAL)
-		self.pack(self.hbox, expand=True, fill=True)
+		self.pack(self.hbox, expand=False, fill=True)
 
-		# FIXME: put back and go buttons in lower corners of the screen
 		back = Button()
 		back.set_text("Back")
 		back.set_color(color)
 		self.hbox.add(back)
-		#back.set_position(0, group.stage.get_height()-back.get_height())
 		back.connect('clicked', lambda b: group.move(1,0))
 
 		self.hbox.pack(Frame(), expand=True, fill=True)
@@ -45,9 +41,6 @@ class VideoChooserMenu(BoxLayout):
 		go.set_text("Go")
 		go.set_color(color)
 		self.hbox.add(go)
-		#go.set_position(
-		#	group.stage.get_width() - go.get_width(),
-		#	group.stage.get_height() - go.get_height())
 		go.connect('clicked', self.on_go_clicked)
 
 	def on_go_clicked(self, button):
