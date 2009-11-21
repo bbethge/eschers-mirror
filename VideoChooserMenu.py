@@ -7,6 +7,7 @@ from Button import Button
 from ListSelector import ListSelector
 from RectGrid import RectGrid
 from BoxLayout import BoxLayout
+from Frame import Frame
 from Config import config
 
 class VideoChooserMenu(BoxLayout):
@@ -26,21 +27,24 @@ class VideoChooserMenu(BoxLayout):
 		#self.chooser.set_size(100, group.stage.get_height()/2.)
 		self.chooser.set_selected(file_names[0])
 		
-		#self.hbox = BoxLayout()
-		#self.hbox.set_orientation(BoxLayout.HORIZONTAL)
-		#self.add(self.hbox)
+		self.hbox = BoxLayout()
+		self.hbox.set_orientation(BoxLayout.HORIZONTAL)
+		self.pack(self.hbox, expand=True, fill=True)
 
+		# FIXME: put back and go buttons in lower corners of the screen
 		back = Button()
 		back.set_text("Back")
 		back.set_color(color)
-		self.add(back)
+		self.hbox.add(back)
 		#back.set_position(0, group.stage.get_height()-back.get_height())
 		back.connect('clicked', lambda b: group.move(1,0))
+
+		self.hbox.pack(Frame(), expand=True, fill=True)
 
 		go = Button()
 		go.set_text("Go")
 		go.set_color(color)
-		self.add(go)
+		self.hbox.add(go)
 		#go.set_position(
 		#	group.stage.get_width() - go.get_width(),
 		#	group.stage.get_height() - go.get_height())

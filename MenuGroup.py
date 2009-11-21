@@ -23,6 +23,8 @@ class MenuGroup(clutter.Group):
 		self.main_frame.add(self.main)
 		
 		self.chooser_frame = Frame()
+		self.chooser_frame.set_expand_child(True)
+		self.chooser_frame.set_padding(20.)
 		self.add(self.chooser_frame)
 
 		self.chooser = VideoChooserMenu(self, color)

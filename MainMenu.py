@@ -11,23 +11,28 @@ class MainMenu(BoxLayout):
 		BoxLayout.__init__(self)
 		self.group = group
 		self.set_orientation(BoxLayout.VERTICAL)
-		self.set_padding(10.)
+		self.set_padding(50.)
 		
 		self.title = clutter.Text()
 		self.title.set_markup('<span size="xx-large">Escher\'s Mirror</span>')
 		self.title.set_color(color)
 		self.add(self.title)
 		
+		vbox = BoxLayout()
+		vbox.set_orientation(BoxLayout.VERTICAL)
+		vbox.set_padding(10.)
+		self.add(vbox)
+
 		self.start = Button()
 		self.start.set_text("Start")
 		self.start.set_color(color)
-		self.add(self.start)
+		vbox.add(self.start)
 		self.start.connect('clicked', lambda b: group.move(-1,0))
 		
 		self.quit = Button()
 		self.quit.set_text("Quit")
 		self.quit.set_color(color)
-		self.add(self.quit)
+		vbox.add(self.quit)
 		
 		self.quit.connect('clicked', self.on_quit_clicked)
 
