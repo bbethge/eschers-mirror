@@ -15,8 +15,15 @@ class RectTile(clutter.Rectangle):
 		self.src_loc = loc
 		self.loc = loc
 
+	def get_loc(self):
+		return self.loc
+
 	def set_loc(self, loc):
 		self.loc = loc
+		# TODO: animate?
+
+	def swap_with(self, other):
+		self.loc, other.loc = other.loc, self.loc
 
 	def in_correct_place(self):
 		return self.src_loc == self.loc
@@ -117,10 +124,11 @@ class RectGrid(Grid, clutter.Container):
 				child_box.x2 = child_box.x1 + w/self.cols
 				child_box.y2 = child_box.y1 + h/self.rows
 			else:
-				child_box.x1 = child.loc[0] * w / self.cols
-				child_box.y1 = child.loc[1] * h / self.rows
-				child_box.x2 = (child.loc[0]+1) * w / self.cols
-				child_box.y2 = (child.loc[1]+1) * h / self.rows
+				col, row = child.get_loc()
+				child_box.x1 = col * w / self.cols
+				child_box.y1 = row * h / self.rows
+				child_box.x2 = (col+1) * w / self.cols
+				child_box.y2 = (row+1) * h / self.rows
 
 			child.allocate(child_box, flags)
 
@@ -149,7 +157,15 @@ class RectGrid(Grid, clutter.Container):
 
 	def on_button_release(self, event):
 		if self.grabbed_tile is not None:
+			self.grabbed_tile.hide()
+			drop_target = self.get_stage().get_actor_at_pos(
+				clutter.PICK_REACTIVE, int(event.x), int(event.y))
+			self.grabbed_tile.show()
+
+			if drop_target in self.children:
+				self.grabbed_tile.swap_with(drop_target)
 			self.grabbed_tile = None
+
 			self.queue_relayout()
 
 	def is_solved(self):
@@ -163,7 +179,7 @@ class RectGrid(Grid, clutter.Container):
 		while len(unshuf) > 1:
 			tile = unshuf.pop()
 			other_tile = random.choice(unshuf)
-			tile.loc, other_tile.loc = other_tile.loc, tile.loc
+			tile.swap_with(other_tile)
 
 RectGrid.install_child_meta(RectGridChildMeta)
 
