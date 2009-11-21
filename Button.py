@@ -100,8 +100,8 @@ class Button(clutter.Actor, clutter.Container):
 			child_box = clutter.ActorBox()
 			child_box.x1 = box.get_width()/2. - w/2.
 			child_box.y1 = box.get_height()/2. - h/2.
-			child_box.x2 = child_box.x1 + box.get_width()/2. + w/2.
-			child_box.y2 = child_box.y1 + box.get_height()/2. + h/2.
+			child_box.x2 = box.get_width()/2. + w/2.
+			child_box.y2 = box.get_height()/2. + h/2.
 
 			self._child.allocate(child_box, flags)
 
