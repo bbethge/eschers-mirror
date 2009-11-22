@@ -1,6 +1,7 @@
 import clutter
 import gobject
 from MenuGroup import MenuGroup
+from Title import Title
 from Config import config
 
 @gobject.type_register
@@ -12,6 +13,11 @@ class Stage(clutter.Stage):
 		self.set_size(width, height)
 		self.set_title("Escher's Mirror")
 		self.connect('destroy', clutter.main_quit)
+
+		# TODO: fix hard-coded path
+		title = Title('/home/ben/eschers-mirror-2.svg')
+		title.set_size(width, height)
+		self.add(title)
 		
 		color = clutter.Color(0xa0, 0xff, 0x90, 0xff)
 		menu_group = MenuGroup(color)
