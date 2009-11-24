@@ -1,3 +1,4 @@
+import os
 import clutter
 import gobject
 from MenuGroup import MenuGroup
@@ -14,8 +15,7 @@ class Stage(clutter.Stage):
 		self.set_title("Escher's Mirror")
 		self.connect('destroy', clutter.main_quit)
 
-		# TODO: fix hard-coded path
-		title = Title('/home/ben/eschers-mirror-2.svg')
+		title = Title(os.path.join('.', 'data', 'title.svg'))
 		title.set_size(width, height)
 		self.add(title)
 		

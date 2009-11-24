@@ -2,6 +2,7 @@ import xml
 import xml.parsers
 import xml.parsers.expat
 import random
+import os
 import clutter
 from clutter import cogl
 
@@ -74,9 +75,8 @@ class Title(clutter.Actor):
 	def __init__(self, svgFileName):
 		clutter.Actor.__init__(self)
 
-		# TODO: fix hard-coded path
 		texture = cogl.texture_new_from_file(
-			'/home/ben/background.jpg', cogl.TEXTURE_NONE,
+			os.path.join('.', 'data', 'background.jpg'), cogl.TEXTURE_NONE,
 			cogl.PIXEL_FORMAT_ANY)
 		self.material = cogl.Material()
 		self.material.set_layer(0, texture)
