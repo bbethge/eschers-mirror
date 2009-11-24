@@ -1,0 +1,36 @@
+Translation
+-----------
+I hope to support internationalization eventually.  Since I wanted to do a
+special effect for the title screen, the title is not just a string that has
+to be translated, but hand-drawn text in an SVG file.  Until I write a more
+powerful SVG parser, the format of this file has several constraints on it:
+ * Each letter should be a single path object.
+ * Everything is contained in a group object.  (Inkscape does this implicitly,
+   so you don't have to explicitly group the letters.)
+ * All the paths consist of straight lines (this is partly a stylistic
+   constraint).
+ * The path data must use only the commands m, l, and z (as of 0.47 Inkscape
+   does this automatically if all the segments are straight).  There must be
+   a command explicitly given for each pair of coordinates (in Inkscape
+   preferences, under "SVG Output", under "Path data", check "Force repeat
+   commands".
+ * It may be necessary to use absolute coordinates (in Inkscape preferences,
+   under "SVG Output", under "Path data", uncheck "Allow relative coordinates").
+ * In Inkscape, it will be necessary to save as plain SVG for the above settings
+   to take effect.
+ * There must be no transformations applied to anything.  To accomplish this in
+   Inkscape, open the XML editor, select the layer group that contains the
+   letters, and delete its transform attribute if it has one.  Then deselect
+   everything, then select everything, then group.  Align this group to the top
+   left corner of the page, then ungroup.  Now you can select "Fit page to
+   selection" in document properties.
+ * The scale of the drawing is insignificant, but the page should fit the logo.
+ * The color of the letters is insignificant, but it will be easier to edit if
+   adjacent letters are in different colors.
+
+Stylistic guidelines:
+ * The letters should be fairly fat, but it may be necessary to vary the weight
+   to make it look good.
+ * There should be as few gaps between letters as possible.  Take every
+   opportunity to make letters fit together.
+ * Use right angles as much as possible.
