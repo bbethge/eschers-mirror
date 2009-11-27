@@ -13,21 +13,7 @@ class RectTile(clutter.Rectangle):
 		clutter.Rectangle.__init__(self)
 		self.set_reactive(True)
 		self.src_loc = loc
-		self.loc = loc
 
-	def get_loc(self):
-		return self.loc
-
-	def set_loc(self, loc):
-		self.loc = loc
-		# TODO: animate?
-
-	def swap_with(self, other):
-		self.loc, other.loc = other.loc, self.loc
-
-	def in_correct_place(self):
-		return self.src_loc == self.loc
-	
 	def do_paint(self):
 		x1, y1, x2, y2 = self.get_allocation_box()
 		w, h = x2-x1, y2-y1
@@ -47,19 +33,37 @@ class RectGridChildMeta(clutter.ChildMeta):
 			gobject.TYPE_ULONG, 'Button press handler',
 			'ID of signal handler installed by grid for button press events',
 			0, gobject.G_MAXULONG, 0,
+			gobject.PARAM_CONSTRUCT|gobject.PARAM_READWRITE),
+		'row': (
+			gobject.TYPE_UINT, 'Row', 'Row that the tile logically is in',
+			0, gobject.G_MAXUINT, 0,
+			gobject.PARAM_CONSTRUCT|gobject.PARAM_READWRITE),
+		'column': (
+			gobject.TYPE_UINT, 'column', 'Column that the tile logically is in',
+			0, gobject.G_MAXUINT, 0,
 			gobject.PARAM_CONSTRUCT|gobject.PARAM_READWRITE) }
 
 	def __init__(self):
 		clutter.ChildMeta.__init__(self)
 		self.button_press_handler = 0
+		self.row = 0
+		self.column = 0
 	
 	def do_get_property(self, pspec):
 		if pspec.name == 'button-press-handler':
 			return self.button_press_handler
+		elif pspec.name == 'row':
+			return self.row
+		elif pspec.name == 'column':
+			return self.column
 	
 	def do_set_property(self, pspec, value):
 		if pspec.name == 'button-press-handler':
 			self.button_press_handler = value
+		elif pspec.name == 'row':
+			self.row = value
+		elif pspec.name == 'column':
+			self.column = value
 
 class RectGrid(Grid, clutter.Container):
 	__gtype_name__ = 'RectGrid'
@@ -74,6 +78,8 @@ class RectGrid(Grid, clutter.Container):
 		for loc in itertools.product(range(cols), range(rows)):
 			tile = RectTile(loc)
 			self.add(tile)
+			self.child_set_property(tile, 'column', loc[0])
+			self.child_set_property(tile, 'row', loc[1])
 		self.shuffle()
 
 		self.set_reactive(True)
@@ -118,17 +124,16 @@ class RectGrid(Grid, clutter.Container):
 		for child in self.children:
 			child_box = clutter.ActorBox()
 
-			if child is self.grabbed_tile:
-				child_box.x1 = self.mouse_pos[0] + self.grab_offset[0]
-				child_box.y1 = self.mouse_pos[1] + self.grab_offset[1]
-				child_box.x2 = child_box.x1 + w/self.cols
-				child_box.y2 = child_box.y1 + h/self.rows
+			if child.get_fixed_position_set():
+				child_box.x1 = child.get_x()
+				child_box.y1 = child.get_y()
 			else:
-				col, row = child.get_loc()
-				child_box.x1 = col * w / self.cols
-				child_box.y1 = row * h / self.rows
-				child_box.x2 = (col+1) * w / self.cols
-				child_box.y2 = (row+1) * h / self.rows
+				child_box.x1 = (
+					self.child_get_property(child, 'column') * w / self.cols)
+				child_box.y1 = (
+					self.child_get_property(child, 'row') * h / self.rows)
+			child_box.x2 = child_box.x1 + w/self.cols
+			child_box.y2 = child_box.y1 + h/self.rows
 
 			child.allocate(child_box, flags)
 
@@ -153,7 +158,9 @@ class RectGrid(Grid, clutter.Container):
 	def on_mouse_motion(self, event):
 		if self.grabbed_tile is not None:
 			self.mouse_pos = self.transform_stage_point(event.x, event.y)
-			self.queue_relayout()
+			self.grabbed_tile.set_position(
+				self.mouse_pos[0] + self.grab_offset[0],
+				self.mouse_pos[1] + self.grab_offset[1])
 
 	def on_button_release(self, event):
 		if self.grabbed_tile is not None:
@@ -163,14 +170,35 @@ class RectGrid(Grid, clutter.Container):
 			self.grabbed_tile.show()
 
 			if drop_target in self.children:
-				self.grabbed_tile.swap_with(drop_target)
+				col = self.child_get_property(self.grabbed_tile, 'column')
+				row = self.child_get_property(self.grabbed_tile, 'row')
+				self.child_set_property(
+					self.grabbed_tile, 'column',
+					self.child_get_property(drop_target, 'column'))
+				self.child_set_property(
+					self.grabbed_tile, 'row',
+					self.child_get_property(drop_target, 'row'))
+				self.child_set_property(drop_target, 'column', col)
+				self.child_set_property(drop_target, 'row', row)
+
+				drop_target.animate(
+					clutter.EASE_OUT_CUBIC, 500,
+					'x', self.child_get_property(drop_target, 'column')*self.get_width()/self.cols,
+					'y', self.child_get_property(drop_target, 'row')*self.get_height()/self.rows)
+			self.grabbed_tile.animate(
+				clutter.EASE_OUT_CUBIC, 500,
+				'x', self.child_get_property(self.grabbed_tile, 'column')*self.get_width()/self.cols,
+				'y', self.child_get_property(self.grabbed_tile, 'row')*self.get_height()/self.rows)
 			self.grabbed_tile = None
 
 			self.queue_relayout()
 
 	def is_solved(self):
 		for tile in self.children:
-			if not tile.in_correct_place():
+			if (
+					self.child_get_property(tile, 'column') != tile.src_loc[0]
+					or self.child_get_property(tile, 'row') != tile.src_loc[1]
+			):
 				return False
 		return True
 	
@@ -179,7 +207,14 @@ class RectGrid(Grid, clutter.Container):
 		while len(unshuf) > 1:
 			tile = unshuf.pop()
 			other_tile = random.choice(unshuf)
-			tile.swap_with(other_tile)
+			col = self.child_get_property(tile, 'column')
+			row = self.child_get_property(tile, 'row')
+			self.child_set_property(
+				tile, 'column', self.child_get_property(other_tile, 'column'))
+			self.child_set_property(
+				tile, 'row', self.child_get_property(other_tile, 'row'))
+			self.child_set_property(other_tile, 'column', col)
+			self.child_set_property(other_tile, 'row', row)
 
 RectGrid.install_child_meta(RectGridChildMeta)
 
