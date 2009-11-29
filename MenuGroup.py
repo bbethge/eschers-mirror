@@ -33,10 +33,11 @@ class MenuGroup(clutter.Group):
 	def do_parent_set(self, old_parent):
 		self.stage = self.get_parent()
 
-		self.main_frame.set_position(0, 0)
-		self.chooser_frame.set_position(self.stage.get_width(), 0)
-		self.main_frame.set_size(*self.stage.get_size())
-		self.chooser_frame.set_size(*self.stage.get_size())
+		if self.stage is not None:
+			self.main_frame.set_position(0, 0)
+			self.chooser_frame.set_position(self.stage.get_width(), 0)
+			self.main_frame.set_size(*self.stage.get_size())
+			self.chooser_frame.set_size(*self.stage.get_size())
 	
 	def move(self, x_amount, y_amount):
 		"""

@@ -20,11 +20,28 @@ class RectTile(clutter.Rectangle):
 		rows = self.get_parent().rows
 		cols = self.get_parent().cols
 
-		cogl.set_source(self.get_parent().get_material())
+		alpha = self.get_paint_opacity()
+		material = self.get_parent().get_material()
+		# TODO: handle alpha properly
+
+		cogl.set_source(material)
 		cogl.rectangle_with_texture_coords(
 			0, 0, w, h,
 			float(self.src_loc[0])/cols, float(self.src_loc[1])/rows,
 			float(self.src_loc[0]+1)/cols, float(self.src_loc[1]+1)/rows)
+
+		texture = cogl.texture_new_from_data(
+			1, 3, cogl.PIXEL_FORMAT_RGBA_8888, 4,
+			"\377\377\377\177\177\177\177\1\1\1\1\177")
+		print texture
+		cogl.set_source_texture(texture)
+		cogl.rectangle_with_texture_coords(0, 0, w, h, 0, 0, 0, 1)
+
+	def paint_shadow(self, altitude):
+		x, y = self.get_position()
+		w, h = self.get_size()
+		cogl.set_source_color4ub(0, 0, 0, 0x80)
+		cogl.rectangle(x, y+altitude, x+w, y+h+altitude)
 
 class RectGridChildMeta(clutter.ChildMeta):
 	__type_name__ = 'RectGridChildMeta'
@@ -142,6 +159,7 @@ class RectGrid(Grid, clutter.Container):
 			if child is not self.grabbed_tile:
 				child.paint()
 		if self.grabbed_tile is not None:
+			self.grabbed_tile.paint_shadow(12)
 			self.grabbed_tile.paint()
 	
 	def do_pick(self, color):
@@ -154,6 +172,7 @@ class RectGrid(Grid, clutter.Container):
 		mouse_x, mouse_y = self.transform_stage_point(event.x, event.y)
 		child_x, child_y = child.get_position()
 		self.grab_offset = child_x-mouse_x, child_y-mouse_y
+		self.grabbed_tile.set_opacity(0x80)
 
 	def on_mouse_motion(self, event):
 		if self.grabbed_tile is not None:
@@ -181,14 +200,20 @@ class RectGrid(Grid, clutter.Container):
 				self.child_set_property(drop_target, 'column', col)
 				self.child_set_property(drop_target, 'row', row)
 
+				col = self.child_get_property(drop_target, 'column')
+				row = self.child_get_property(drop_target, 'row')
 				drop_target.animate(
 					clutter.EASE_OUT_CUBIC, 500,
-					'x', self.child_get_property(drop_target, 'column')*self.get_width()/self.cols,
-					'y', self.child_get_property(drop_target, 'row')*self.get_height()/self.rows)
+					'x', col*self.get_width()/self.cols,
+					'y', row*self.get_height()/self.rows)
+
+			col = self.child_get_property(self.grabbed_tile, 'column')
+			row = self.child_get_property(self.grabbed_tile, 'row')
 			self.grabbed_tile.animate(
 				clutter.EASE_OUT_CUBIC, 500,
-				'x', self.child_get_property(self.grabbed_tile, 'column')*self.get_width()/self.cols,
-				'y', self.child_get_property(self.grabbed_tile, 'row')*self.get_height()/self.rows)
+				'x', col*self.get_width()/self.cols,
+				'y', row*self.get_height()/self.rows)
+			self.grabbed_tile.set_opacity(0xff)
 			self.grabbed_tile = None
 
 			self.queue_relayout()
