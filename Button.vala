@@ -12,6 +12,8 @@ class Button: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 	private bool highlighted = false;
 	protected Clutter.Actor? child = null;
 
+	private static Clutter.Color default_color =
+		Clutter.Color.from_string("#ffffffff");
 	private Clutter.Color _color;
 	public Clutter.Color color {
 		get { return _color; }
@@ -19,7 +21,7 @@ class Button: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 			_color = value;
 			update_child_color();
 		}
-		default = Clutter.Color.from_string("#ffffffff");
+		default = default_color;
 	}
 
 	public Button() {
@@ -155,7 +157,7 @@ class Button: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 	}
 
 	public override bool button_press_event(Clutter.ButtonEvent event) {
-		clicked.emit();
+		clicked();
 		return true;
 	}
 

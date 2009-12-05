@@ -1,0 +1,3 @@
+include/clutter-1.0/clutter-gst/clutter-gst.h
+include/clutter-1.0/clutter-gst/clutter-gst-version.h
+include/clutter-1.0/clutter-gst/clutter-gst-video-sink.h
