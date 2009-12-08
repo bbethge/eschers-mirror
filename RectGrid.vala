@@ -1,3 +1,4 @@
+/*
 protected class RectTile: Clutter.Rectangle {
 	public uint src_col;
 	public uint src_row;
@@ -45,236 +46,104 @@ protected class RectTile: Clutter.Rectangle {
 		Cogl.rectangle(x, y+altitude, x+w, y+h+altitude);
 	}
 }
+*/
 
-public class RectShadow: Clutter.Rectangle {
-	protected Cogl.VertexBuffer vbo = new Cogl.VertexBuffer(22);
-	protected float w = 0;
-	protected float h = 0;
+protected class TileInfo: Object {
+	public Tile tile;
+	public uint col;
+	public uint row;
+	public uint src_col;
+	public uint src_row;
 
-	private float _altitude;
-	public float altitude {
-		get { return _altitude; }
-		set { _altitude = value; recalc_vbo(); }
-		default = 0;
-	}
-
-	public override void allocate(
-		Clutter.ActorBox box, Clutter.AllocationFlags flags
-	) {
-		base.allocate(box, flags);
-
-		float new_width, new_height;
-		box.get_size(out new_width, out new_height);
-		if (new_width == w && new_height == h) {
-			return;
-		}
-
-		w = new_width;
-		h = new_height;
-		recalc_vbo();
-	}
-
-	protected void recalc_vbo() {
-		float a = altitude;
-
-		float[] verts = {
-			0 + a, 0 + a,
-			0 + a, h - a,
-			w - a, 0 + a,
-			w - a, h - a,
-
-			w - a, 0 + a,
-			w + a, h - a,
-
-			w - a, 0 + a,
-			w + a, 0 + a,
-
-			w - a, 0 + a,
-			w - a, 0 - a,
-
-			0 + a, 0 + a,
-			0 + a, 0 - a,
-
-			0 + a, 0 + a,
-			0 - a, 0 + a,
-
-			0 + a, h - a,
-			0 - a, h - a,
-
-			0 + a, h - a,
-			0 + a, h + a,
-
-			w - a, h - a,
-			w - a, h + a,
-
-			w - a, h - a,
-			w + a, h - a
-		};
-
-		uchar[] colors = {
-			0, 0, 0, 0xff,
-			0, 0, 0, 0xff,
-			0, 0, 0, 0xff,
-			0, 0, 0, 0xff,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0,
-
-			0, 0, 0, 0xff,
-			0, 0, 0, 0
-		};
-
-		vbo.add("gl_Vertex", 2, Cogl.AttributeType.FLOAT, false, 0, verts);
-		vbo.add("gl_Color", 4, Cogl.AttributeType.UNSIGNED_BYTE, true, 0, colors);
-		vbo.submit();
-	}
-
-	public override void paint() {
-		Cogl.set_source_color4ub(0xff, 0, 0, 0xff);
-		vbo.draw(Cogl.VerticesMode.TRIANGLE_STRIP, 0, 22);
+	public TileInfo(Tile tile, uint col, uint row, uint src_col, uint src_row) {
+		this.tile = tile;
+		this.col = col;
+		this.row = row;
+		this.src_col = src_col;
+		this.src_row = src_row;
 	}
 }
 
-protected class RectGridChildMeta: Clutter.ChildMeta {
+public class RectGrid: Grid {
+	private uint rows;
+	private uint cols;
 
-	[Property(
-		nick = "Button press handler",
-		blurb = "ID of signal handler installed by grid for button press events"
-	)]
-	public ulong button_press_handler { get; set; default = 0; }
-
-	[Property(nick="Row", blurb="Row that the tile logically is in")]
-	public uint row { get; set; }
-
-	[Property(nick="column", blurb="Column that the tile logically is in")]
-	public uint column { get; set; }
-
-	public RectGridChildMeta(Clutter.Actor actor, Clutter.Container container) {
-		Object(actor: actor, container: container);
-	}
-}
-
-public class RectGrid: Grid, Clutter.Container, Clutter.Scriptable {
-	// TODO: make private
-	public uint rows;
-	public uint cols;
-
-	private SList<Clutter.Actor> children;
-	private RectTile? grabbed_tile = null;
+	private SList<Tile> tiles;
+	private Tile? grabbed_tile = null;
 	private float grab_offset_x;
 	private float grab_offset_y;
-	private bool child_meta_installed = false;
+	private TileShadow shadow;
 
 	public RectGrid(string videoFile, uint rows, uint cols) {
 		base(videoFile);
 
-		// HACK
-		if (!child_meta_installed) {
-			install_child_meta(typeof(RectGrid), typeof(RectGridChildMeta));
-			child_meta_installed = true;
-		}
-
 		this.cols = cols;
 		this.rows = rows;
 
+		TileVertex[] verts = new TileVertex[4];
+		verts[0].x = 0; verts[0].y = 0;
+		verts[1].x = 1; verts[1].y = 0;
+		verts[2].x = 1; verts[2].y = 1;
+		verts[3].x = 0; verts[3].y = 1;
+
+		var shape = new TileShape();
+		shape.verts = verts;
+
 		for (uint col = 0; col < cols; ++col) {
 			for (uint row = 0; row < rows; ++row) {
-				var tile = new RectTile(col, row);
-				add_actor(tile);
-				child_set(tile, "column", col, "row", row, null);
+				var mat = Cogl.Matrix.identity();
+				mat.scale(1.0f/cols, 1.0f/rows, 1);
+				mat.translate(col, row, 0);
+
+				var tile = new Tile(shape, mat, clutter_texture);
+				var tile_info = new TileInfo(tile, col, row, col, row);
+				set_tile_info(tile, tile_info);
+
+				tiles.prepend(tile);
+				tile.set_parent(this);
+				tile.button_press_event.connect(on_tile_button_press);
 			}
 		}
 		shuffle();
+
+		shadow = new TileShadow(shape);
+		shadow.set_parent(this);
+		shadow.altitude = 15;
 
 		reactive = true;
 		motion_event.connect(on_mouse_motion);
 		button_release_event.connect(on_button_release);
 	}
 
-	//public void set_grabbed_tile(weak RectTile? tile) {
-	//	grabbed_tile = tile;
-	//}
-
-	public void add_actor(Clutter.Actor actor) {
-		if (children.index(actor) >= 0) {
-			warning(
-				"Actor of type %s is already a child of this RectGrid",
-				actor.get_type().name()
-			);
-		}
-		else {
-			children.append(actor);
-			actor.set_parent(this);
-			actor.button_press_event.connect(on_child_button_press);
-			queue_relayout();
-		}
-	}
-	
-	public void remove_actor(Clutter.Actor actor) {
-		if (children.index(actor) == -1) {
-			warning(
-				"Actor of type %s is not a child of this RectGrid",
-				actor.get_type().name()
-			);
-		}
-		else {
-			children.remove(actor);
-			actor.button_press_event.disconnect(on_child_button_press);
-			actor.unparent();
-			queue_relayout();
-		}
+	protected static void set_tile_info(Tile tile, TileInfo info) {
+		// Vala doesn't ref info when we pass it as a pointer, so we ref it
+		// explicitly
+		info.@ref();
+		tile.set_data_full("rect-grid-tile-info", info, Object.unref);
 	}
 
-	public void @foreach(Clutter.Callback callback) {
-		foreach (var child in children) {
-			callback(child);
-		}
+	protected static TileInfo? get_tile_info(Tile tile) {
+		var info = tile.get_data("rect-grid-tile-info") as TileInfo;
+		assert(info != null);
+		return info;
 	}
 
-//	public unowned Clutter.ChildMeta get_child_meta(Clutter.Actor actor) {
-//		Clutter.ChildMeta *meta =
-//			actor.get_data("clutter-container-child-meta");
-//		if (meta != null && meta->actor == actor) {
-//			return meta;
-//		}
-//		return null;
-//	}
-//
-//	public void create_child_meta(Clutter.Actor actor) {
-//		RectGridChildMeta child_meta = new RectGridChildMeta(actor, this);
-//		if (child_meta != null) {
-//			child_meta.@ref();
-//			actor.set_data_full(
-//				"clutter-container-child-meta", child_meta, Object.unref
-//			);
-//		}
-//	}
-//
-//	public void destroy_child_meta(Clutter.Actor actor) {
-//		actor.set_data("clutter-container-child-meta", null);
-//	}
-//
+	public override void map() {
+		base.map();
+		foreach (var tile in tiles) {
+			tile.map();
+		}
+		shadow.map();
+	}
+
+	public override void unmap() {
+		base.unmap();
+		foreach (var tile in tiles) {
+			tile.unmap();
+		}
+		shadow.unmap();
+	}
+
 	public override void allocate(
 		Clutter.ActorBox box, Clutter.AllocationFlags flags
 	) {
@@ -282,50 +151,62 @@ public class RectGrid: Grid, Clutter.Container, Clutter.Scriptable {
 		float w, h;
 		box.get_size(out w, out h);
 
-		foreach (var child in children) {
-			var child_box = Clutter.ActorBox();
+		foreach (var tile in tiles) {
+			var tile_box = Clutter.ActorBox();
 
-			if (child.fixed_position_set) {
-				child_box.x1 = child.x;
-				child_box.y1 = child.y;
+			if (tile.fixed_position_set) {
+				tile_box.x1 = tile.x;
+				tile_box.y1 = tile.y;
 			}
 			else {
-				uint col, row;
-				child_get(child, "column", out col, "row", out row, null);
-				child_box.x1 = col * w / cols;
-				child_box.y1 = row * h / rows;
+				var tile_info = get_tile_info(tile);
+				tile_box.x1 = tile_info.col * w / cols;
+				tile_box.y1 = tile_info.row * h / rows;
 			}
-			child_box.x2 = child_box.x1 + w/cols;
-			child_box.y2 = child_box.y1 + h/rows;
+			tile_box.x2 = tile_box.x1 + w/cols;
+			tile_box.y2 = tile_box.y1 + h/rows;
 
-			child.allocate(child_box, flags);
+			tile.allocate(tile_box, flags);
 		}
+
+		var shadow_box = Clutter.ActorBox();
+		if (grabbed_tile != null) {
+			shadow_box.x1 = grabbed_tile.x;
+			shadow_box.y1 = grabbed_tile.y + 10;
+		}
+		else {
+			shadow_box.x1 = 0;
+			shadow_box.y1 = 0;
+		}
+		shadow_box.x2 = shadow_box.x1 + w/cols;
+		shadow_box.y2 = shadow_box.y1 + h/rows;
+		shadow.allocate(shadow_box, flags);
 	}
 
 	public override void paint() {
-		foreach (var child in children) {
-			if (child != grabbed_tile) {
-				child.paint();
+		foreach (var tile in tiles) {
+			if (tile != grabbed_tile) {
+				tile.paint();
 			}
 		}
 		if (grabbed_tile != null) {
-			grabbed_tile.paint_shadow(12);
+			shadow.paint();
 			grabbed_tile.paint();
 		}
 	}
 	
 	public override void pick(Clutter.Color color) {
 		base.pick(color);
-		foreach (var child in children) {
-			child.paint();
+		foreach (var tile in tiles) {
+			tile.paint();
 		}
 	}
 
-	protected bool on_child_button_press(
-		Clutter.Actor child, Clutter.ButtonEvent event
+	protected bool on_tile_button_press(
+		Clutter.Actor actor, Clutter.ButtonEvent event
 	) {
-		if (child is RectTile) {
-			grabbed_tile = (RectTile) child;
+		if (actor is Tile) {
+			grabbed_tile = (Tile) actor;
 			float mouse_x = event.x, mouse_y = event.y;
 			// FIXME: bindings for transform_stage_point are broken
 			//transform_stage_point(event.x, event.y, mouse_x, mouse_y);
@@ -364,44 +245,33 @@ public class RectGrid: Grid, Clutter.Container, Clutter.Scriptable {
 			);
 			grabbed_tile.show();
 
-			if (children.index(drop_target) != -1) {
-				uint grabbed_col, grabbed_row;
-				child_get(
-					grabbed_tile,
-					"column", out grabbed_col,
-					"row", out grabbed_row,
-					null
-				);
-				uint drop_col, drop_row;
-				child_get(
-					drop_target,
-					"column", out drop_col,
-					"row", out drop_row,
-					null
-				);
-				child_set(
-					grabbed_tile, "column", drop_col, "row", drop_row, null
-				);
-				child_set(
-					drop_target, "column", grabbed_col, "row", grabbed_row, null
-				);
+			TileInfo grabbed_tile_info = get_tile_info(grabbed_tile);
 
+			if (tiles.index(drop_target as Tile) != -1) {
+				TileInfo target_tile_info = get_tile_info((Tile)drop_target);
+
+				// swap logical positions of grabbed tile and drop target
+				uint grabbed_col = grabbed_tile_info.col;
+				uint grabbed_row = grabbed_tile_info.row;
+				grabbed_tile_info.col = target_tile_info.col;
+				grabbed_tile_info.row = target_tile_info.row;
+				target_tile_info.col = grabbed_col;
+				target_tile_info.row = grabbed_row;
+
+				// Make drop target move to its new position
 				drop_target.animate(
 					Clutter.AnimationMode.EASE_OUT_CUBIC, 500,
-					"x", grabbed_col*width/cols,
-					"y", grabbed_row*height/rows,
+					"x", target_tile_info.col*width/cols,
+					"y", target_tile_info.row*height/rows,
 					null
 				);
 			}
 
-			uint row, col;
-			child_get(
-				grabbed_tile, "column", out col, "row", out row, null
-			);
+			// Make grabbed tile move to its (new) position
 			grabbed_tile.animate(
 				Clutter.AnimationMode.EASE_OUT_CUBIC, 500,
-				"x", col*width/cols,
-				"y", row*height/rows
+				"x", grabbed_tile_info.col*width/cols,
+				"y", grabbed_tile_info.row*height/rows
 			);
 			grabbed_tile.opacity = 0xff;
 			grabbed_tile = null;
@@ -413,14 +283,13 @@ public class RectGrid: Grid, Clutter.Container, Clutter.Scriptable {
 	}
 
 	public override bool is_solved() {
-		foreach (var child in children) {
-			if (child is RectTile) {
-				var tile = (RectTile) child;
-				uint row, col;
-				child_get(child, "column", out col, "row", out row, null);
-				if (col != tile.src_col || row != tile.src_row) {
-					return false;
-				}
+		foreach (var tile in tiles) {
+			var tile_info = get_tile_info(tile);
+			if (
+				tile_info.col != tile_info.src_col
+				|| tile_info.row != tile_info.src_row
+			) {
+				return false;
 			}
 		}
 		return true;
@@ -428,25 +297,24 @@ public class RectGrid: Grid, Clutter.Container, Clutter.Scriptable {
 	
 	public override void shuffle() {
 		for (
-			weak SList<Clutter.Actor> unshuffled = children;
+			weak SList<Tile> unshuffled = tiles;
 			unshuffled.next != null;
 			unshuffled = unshuffled.next
 		) {
-			weak Clutter.Actor child = unshuffled.data;
+			Tile tile = unshuffled.data;
 			int32 index = Random.int_range(1, (int32) unshuffled.length());
-			weak Clutter.Actor other_child = unshuffled.nth_data(index);
+			Tile other_tile = unshuffled.nth_data(index);
 
-			// swap the logical positions of child and other_child
-			uint col, row;
-			child_get(child, "column", out col, "row", out row, null);
+			var tile_info = get_tile_info(tile);
+			var other_tile_info = get_tile_info(other_tile);
 
-			uint other_col, other_row;
-			child_get(
-				other_child, "column", out other_col, "row", out other_row, null
-			);
-
-			child_set(child, "column", other_col, "row", other_row, null);
-			child_set(other_child, "column", col, "row", row, null);
+			// swap the logical positions of tile and other tile
+			uint col = tile_info.col;
+			uint row = tile_info.row;
+			tile_info.col = other_tile_info.col;
+			tile_info.row = other_tile_info.row;
+			other_tile_info.col = col;
+			other_tile_info.row = row;
 		}
 	}
 }

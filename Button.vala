@@ -1,84 +1,67 @@
-class Button: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
+class Button: Clutter.Actor {
 	// A button.
-	// 
-	// Although it isn't designed to let you add arbitrary actors to it, I can't
-	// make it work without inheriting from clutter.Container.
 
 	public signal void clicked();
 
+
+	/**
+	 * preferred ratio of padding to label height
+	 */
 	static float padding_ratio = 1.0f/4;
-		// preferred ratio of padding to child height
 
 	private bool highlighted = false;
-	protected Clutter.Actor? child = null;
+	private Clutter.Text label = new Clutter.Text();
 
-	private static Clutter.Color default_color =
-		Clutter.Color.from_string("#ffffffff");
+	public string text {
+		get { return label.text; }
+		set { label.text = value; }
+	}
+
 	private Clutter.Color _color;
 	public Clutter.Color color {
 		get { return _color; }
 		set {
 			_color = value;
-			update_child_color();
+			update_label_color();
 		}
-		default = default_color;
 	}
 
 	public Button() {
 		reactive = true;
-
-		//self.connect('enter-event', self.__class__.on_enter)
-		//self.connect('leave-event', self.__class__.on_leave)
-		//self.connect('button-press-event', self.__class__.on_button_press)
-	}
-
-	// clutter.Container methods
-
-	 public void add_actor(Clutter.Actor actor) {
-		if (actor != child && actor is Clutter.Text) {
-			if (child != null) {
-				child.unparent();
-			}
-			child = actor;
-			child.set_parent(this);
-			queue_relayout();
-		}
-	}
-	
-	public void remove_actor(Clutter.Actor actor) {
-		if (actor == child) {
-			child = null;
-			actor.unparent();
-			queue_relayout();
-		}
-	}
-
-	public void @foreach(Clutter.Callback callback) {
-		if (child != null) {
-			callback(child);
-		}
+		label.set_parent(this);
+		color = Clutter.Color.from_string("#ffffffff");
 	}
 
 	// clutter.Actor methods
+
+	public override void map() {
+		base.map();
+		label.map();
+	}
+
+	public override void unmap() {
+		base.unmap();
+		label.unmap();
+	}
 
 	public override void get_preferred_width(
 		float for_height, out float min_width, out float natural_width
 	) {
 		min_width = 0;
 		natural_width = 0;
-		if (child != null && child.visible) {
-			float child_min_width, child_natural_width;
-			child.get_preferred_width(
-				for_height, out child_min_width, out child_natural_width
+		if (label.visible) {
+			float label_min_width, label_natural_width;
+			label.get_preferred_width(
+				for_height, out label_min_width, out label_natural_width
 			);
-			float child_min_height, child_natural_height;
-			child.get_preferred_height(
-				child_natural_width, out child_min_height,
-				out child_natural_height
+			float label_min_height, label_natural_height;
+			label.get_preferred_height(
+				label_natural_width, out label_min_height,
+				out label_natural_height
 			);
-			min_width += child_min_width;
+			min_width += label_min_width;
 			natural_width += 
-				child_natural_width + 2*padding_ratio*child_natural_height;
+				label_natural_width + 2*padding_ratio*label_natural_height;
 		}
 	}
 
@@ -87,72 +70,59 @@ class Button: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 	) {
 		min_height = 0;
 		natural_height = 0;
-		if (child != null && child.visible) {
-			float child_min_height, child_natural_height;
-			child.get_preferred_height(
-				for_width, out child_min_height, out child_natural_height
+		if (label.visible) {
+			float label_min_height, label_natural_height;
+			label.get_preferred_height(
+				for_width, out label_min_height, out label_natural_height
 			);
-			min_height = float.max(min_height, child_min_height);
+			min_height = float.max(min_height, label_min_height);
 			natural_height = float.max(
-				natural_height, child_natural_height*(1+2*padding_ratio));
+				natural_height, label_natural_height*(1+2*padding_ratio));
 		}
 	}
 
 	public override void allocate(
 		Clutter.ActorBox box, Clutter.AllocationFlags flags
 	) {
-		if (child != null && child.visible) {
-			// Give the child the maximum of its preferred size and our
+		if (label != null && label.visible) {
+			// Give the label the maximum of its preferred size and our
 			// allocated size
 			float w, h;
-			child.get_preferred_size(null, null, out w, out h);
+			label.get_preferred_size(null, null, out w, out h);
 			w = float.min(w, box.get_width());
 			h = float.min(h, box.get_height());
 
-			// Center the child's allocation box in ours
-			var child_box = Clutter.ActorBox();
-			child_box.x1 = box.get_width()/2 - w/2;
-			child_box.y1 = box.get_height()/2 - h/2;
-			child_box.x2 = box.get_width()/2 + w/2;
-			child_box.y2 = box.get_height()/2 + h/2;
+			// Center the label's allocation box in ours
+			var label_box = Clutter.ActorBox();
+			label_box.x1 = box.get_width()/2 - w/2;
+			label_box.y1 = box.get_height()/2 - h/2;
+			label_box.x2 = box.get_width()/2 + w/2;
+			label_box.y2 = box.get_height()/2 + h/2;
 
-			child.allocate(child_box, flags);
+			label.allocate(label_box, flags);
 		}
 
 		base.allocate(box, flags);
 	}
 
-	protected void update_child_color() {
-		if (child != null && child is Clutter.Text) {
-			if (highlighted) {
-				((Clutter.Text)child).color =
-					Clutter.Color.from_string("#000000ff");
-			}
-			else {
-				((Clutter.Text)child).color = color;
-			}
+	protected void update_label_color() {
+		if (highlighted) {
+			label.color = Clutter.Color.from_string("#000000ff");
 		}
-	}
-
-	public void set_text(string text) {
-		if (child == null) {
-			add_actor(new Clutter.Text());
-			update_child_color();
-		}
-		if (child is Clutter.Text) {
-			((Clutter.Text)child).text = text;
+		else {
+			label.color = color;
 		}
 	}
 
 	public override bool enter_event(Clutter.CrossingEvent event) {
 		highlighted = true;
-		update_child_color();
+		update_label_color();
 		return true;
 	}
 
 	public override bool leave_event(Clutter.CrossingEvent event) {
 		highlighted = false;
-		update_child_color();
+		update_label_color();
 		return true;
 	}
 
@@ -180,9 +150,7 @@ class Button: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 		Cogl.path_round_rectangle(0, 0, width, height, 5, 5);
 		Cogl.path_fill();
 
-		if (child != null) {
-			child.paint();
-		}
+		label.paint();
 	}
 }
 
