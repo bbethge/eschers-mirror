@@ -187,9 +187,11 @@ public class TileShadow: Clutter.Actor {
 		float[] tex_coords = new float[n_verts];
 
 		for (uint i = 0; i < n; ++i) {
+			// This is necessary because, apparently, -1%n == -1 instead of n-1.
+			uint prev_i = i>0 ? i-1 : n-1;
 			Vec2 v1 = Vec2(
-				shape_verts[i].x - shape_verts[(i-1)%n].x,
-				shape_verts[i].y - shape_verts[(i-1)%n].y
+				shape_verts[i].x - shape_verts[prev_i].x,
+				shape_verts[i].y - shape_verts[prev_i].y
 			);
 
 			Vec2 v2 = Vec2(
