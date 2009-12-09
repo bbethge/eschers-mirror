@@ -121,11 +121,16 @@ public class Tile: Clutter.Actor {
 }
 
 public class TileShadow: Clutter.Actor {
+	protected class const uint CORNER_SLICES = 5;
+
 	protected Cogl.VertexBuffer vbo;
 	protected Cogl.VertexBufferIndices index_buffer;
 	protected TileShape shape;
 	protected float prev_width = 0;
 	protected float prev_height = 0;
+	protected uint n_verts;
+	protected uint n_triangles;
+	protected Cogl.Material material = new Cogl.Material();
 
 	private float _altitude;
 	public float altitude {
@@ -147,7 +152,9 @@ public class TileShadow: Clutter.Actor {
 	public TileShadow(TileShape shape) {
 		this.shape = shape;
 		var shape_verts = shape.verts;
-		vbo = new Cogl.VertexBuffer(2*shape_verts.length);
+		n_verts = shape_verts.length + shape_verts.length*(CORNER_SLICES+1);
+		vbo = new Cogl.VertexBuffer(n_verts);
+		material.set_layer(0, texture);
 	}
 
 	public override void allocate(
@@ -176,28 +183,44 @@ public class TileShadow: Clutter.Actor {
 		float a = altitude;
 		TileVertex[] shape_verts = shape.verts;
 		uint n = shape_verts.length;
-		float[,] verts = new float[2*n,2];
-		float[] tex_coords = new float[2*n];
+		float[,] verts = new float[n_verts, 2];
+		float[] tex_coords = new float[n_verts];
 
 		for (uint i = 0; i < n; ++i) {
-			float v1_x = shape_verts[i].x - shape_verts[(i-1)%n].x;
-			float v1_y = shape_verts[i].y - shape_verts[(i-1)%n].y;
-			float v1_len = Math.hypotf(v1_x, v1_y);
+			Vec2 v1 = Vec2(
+				shape_verts[i].x - shape_verts[(i-1)%n].x,
+				shape_verts[i].y - shape_verts[(i-1)%n].y
+			);
 
-			float v2_x = shape_verts[(i+1)%n].x - shape_verts[i].x;
-			float v2_y = shape_verts[(i+1)%n].y - shape_verts[i].y;
-			float v2_len = Math.hypotf(v2_x, v2_y);
+			Vec2 v2 = Vec2(
+				shape_verts[(i+1)%n].x - shape_verts[i].x,
+				shape_verts[(i+1)%n].y - shape_verts[i].y
+			);
 
-			float off_x = a * (v1_x*v2_len-v2_x*v1_len) / (v1_x*v2_y-v1_y*v2_x);
-			float off_y = a * (v1_y*v2_len-v2_y*v1_len) / (v1_x*v2_y-v1_y*v2_x);
+			Vec2 off1, off2;
+			v1.rot90(out off1);
+			off1.scale(-a/off1.norm(), out off1);
+			v2.rot90(out off2);
+			off2.scale(-a/off2.norm(), out off2);
 
-			verts[i,0] = shape_verts[i].x*w - off_x;
-			verts[i,1] = shape_verts[i].y*h - off_y;
-			verts[n+i,0] = shape_verts[i].x*w + off_x;
-			verts[n+i,1] = shape_verts[i].y*h + off_y;
-
+			verts[i,0] = shape_verts[i].x*w;
+			verts[i,1] = shape_verts[i].y*h;
 			tex_coords[i] = 0.75f;
-			tex_coords[n+i] = 0.25f;
+
+			float angle = Math.acosf(off1.dot(off2)/(a*a)) / CORNER_SLICES;
+
+			for (uint k = 0; k < CORNER_SLICES; ++k) {
+				Vec2 off;
+				off1.rotate(k*angle, out off);
+				verts[n+(CORNER_SLICES+1)*i+k,0] = shape_verts[i].x*w + off.x;
+				verts[n+(CORNER_SLICES+1)*i+k,1] = shape_verts[i].y*h + off.y;
+				tex_coords[n+(CORNER_SLICES+1)*i+k] = 0.25f;
+			}
+			verts[n+(CORNER_SLICES+1)*i+CORNER_SLICES,0] =
+				shape_verts[i].x*w + off2.x;
+			verts[n+(CORNER_SLICES+1)*i+CORNER_SLICES,1] =
+				shape_verts[i].y*w + off2.y;
+			tex_coords[n+(CORNER_SLICES+1)*i+CORNER_SLICES] = 0.25f;
 		}
 		vbo.add("gl_Vertex", 2, Cogl.AttributeType.FLOAT, false, 0, verts);
 		vbo.add(
@@ -206,7 +229,8 @@ public class TileShadow: Clutter.Actor {
 		);
 		vbo.submit();
 
-		uchar[,] indices = new uchar[3*n-2,3];
+		n_triangles = (n-2) + 2*n + CORNER_SLICES*n;
+		uchar[,] indices = new uchar[n_triangles, 3];
 		for (uint i = 0; i < n-2; ++i) {
 			indices[i,0] = 0;
 			indices[i,1] = (uchar)i+1;
@@ -214,27 +238,36 @@ public class TileShadow: Clutter.Actor {
 		}
 
 		for (uint i = 0; i < n; ++i) {
-			indices[n-2+2*i,0] = (uchar)i;
-			indices[n-2+2*i,1] = (uchar) (n+i);
-			indices[n-2+2*i,2] = (uchar) (n + (i+1)%n);
+			indices[(n-2)+2*i,0] = (uchar)i;
+			indices[(n-2)+2*i,1] =
+				(uchar) (n + (CORNER_SLICES+1)*i + CORNER_SLICES);
+			indices[(n-2)+2*i,2] = (uchar) (n + (CORNER_SLICES+1)*((i+1)%n));
 
-			indices[n-2+2*i+1,0] = (uchar)i;
-			indices[n-2+2*i+1,1] = (uchar) (n + (i+1)%n);
-			indices[n-2+2*i+1,2] = (uchar) ((i+1)%n);
+			indices[(n-2)+2*i+1,0] = (uchar)i;
+			indices[(n-2)+2*i+1,1] = (uchar) (n + (CORNER_SLICES+1)*((i+1)%n));
+			indices[(n-2)+2*i+1,2] = (uchar) ((i+1)%n);
+
+			for (uint k = 0; k < CORNER_SLICES; ++k) {
+				indices[(n-2)+2*n+CORNER_SLICES*i+k,0] = (uchar)i;
+				indices[(n-2)+2*n+CORNER_SLICES*i+k,1] =
+					(uchar) (n + (CORNER_SLICES+1)*i + k);
+				indices[(n-2)+2*n+CORNER_SLICES*i+k,2] =
+					(uchar) (n + (CORNER_SLICES+1)*i + k + 1);
+			}
 		}
 		index_buffer = new Cogl.VertexBufferIndices(
-			Cogl.IndicesType.BYTE, indices, (int) (3*(3*n-2))
+			Cogl.IndicesType.BYTE, indices, (int) (3*n_triangles)
 		);
 	}
 
 	public override void paint() {
-		var shape_verts = shape.verts;
+		uchar alpha = get_paint_opacity();
+		material.set_color4ub(alpha, alpha, alpha, alpha);
+		Cogl.set_source(material);
 
-		Cogl.set_source_texture(texture);
 		vbo.draw_elements(
 			Cogl.VerticesMode.TRIANGLES, index_buffer,
-			0, 2*shape_verts.length,
-			0, 3*(3*shape_verts.length-2)
+			0, (int)n_verts, 0, (int) (3*n_triangles)
 		);
 	}
 }

@@ -109,6 +109,7 @@ public class RectGrid: Grid {
 		shadow = new TileShadow(shape);
 		shadow.set_parent(this);
 		shadow.altitude = 15;
+		shadow.opacity = 0x80;
 
 		reactive = true;
 		motion_event.connect(on_mouse_motion);
@@ -172,7 +173,7 @@ public class RectGrid: Grid {
 		var shadow_box = Clutter.ActorBox();
 		if (grabbed_tile != null) {
 			shadow_box.x1 = grabbed_tile.x;
-			shadow_box.y1 = grabbed_tile.y + 10;
+			shadow_box.y1 = grabbed_tile.y;
 		}
 		else {
 			shadow_box.x1 = 0;
