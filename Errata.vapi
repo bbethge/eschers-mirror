@@ -7,6 +7,9 @@ namespace Cogl {
 	);
 	public void set_draw_buffer(Cogl.BufferTarget target, Cogl.Offscreen? offscreen);
 }
+
 namespace Errata {
+	using GLib;
 	public Cogl.Color cogl_color_new();
+	public void install_child_meta(Type container_type, Type child_meta_type);
 }

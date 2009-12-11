@@ -80,12 +80,11 @@ public class RectGrid: Grid {
 		this.cols = cols;
 		this.rows = rows;
 
-		TileVertex[] verts = new TileVertex[5];
+		TileVertex[] verts = new TileVertex[4];
 		verts[0].x = 0; verts[0].y = 0;
-		verts[1].x = 0.5f; verts[1].y = 0;
-		verts[2].x = 1; verts[2].y = 0.5f;
-		verts[3].x = 0.5f; verts[3].y = 1;
-		verts[4].x = 0; verts[4].y = 1;
+		verts[1].x = 1; verts[1].y = 0;
+		verts[2].x = 1; verts[2].y = 1;
+		verts[3].x = 0; verts[3].y = 1;
 
 		var shape = new TileShape();
 		shape.verts = verts;

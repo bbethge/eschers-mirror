@@ -1,5 +1,5 @@
 public int main(string[] args) {
-	ClutterGst.init(ref args);
+	Clutter.init(ref args);
 
 	var stage = new Clutter.Stage();
 		var stage_color = Clutter.Color();
@@ -9,11 +9,19 @@ public int main(string[] args) {
 		stage_color.alpha = 0xff;
 		stage.color = stage_color;
 		stage.hide.connect((s) => { Clutter.main_quit(); });
-		var grid = new RectGrid("/home/ben/Music Videos/betika.ogv", 3, 4);
-			stage.add_actor(grid);
+		var layout = new BoxLayout();
+			layout.set_size(300, 200);
+			layout.padding = 10;
+			layout.orientation = BoxLayout.Orientation.HORIZONTAL;
+			var button = new Button();
+				button.text = "hello";
+				layout.pack(button, true, true);
+			var button2 = new Button();
+				button2.text = "goodbye";
+				layout.pack(button2, true, false);
+			stage.add_actor(layout);
 		stage.show();
 
-	grid.start();
 	Clutter.main();
 
 	return 0;
