@@ -30,7 +30,6 @@ class Frame: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 			if (child != null) {
 				child.unparent();
 			}
-			stdout.printf("add_actor\n");
 			child = new_child;
 			child.set_parent(this);
 			queue_relayout();
@@ -123,7 +122,6 @@ class Frame: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 
 			child.allocate(child_box, flags);
 		}
-		stdout.printf("allocate %f, %f, %f, %f\n", box.x1, box.y1, box.x2, box.y2);
 
 		base.allocate(box, flags);
 	}

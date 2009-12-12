@@ -1,4 +1,4 @@
-class BoxLayoutChildMeta: Clutter.ChildMeta {
+protected class BoxLayoutChildMeta: Clutter.ChildMeta {
 	[Property(nick="Expand", blurb="Expand to use all available space")]
 	public bool expand { get; set; default = false; }
 
@@ -6,7 +6,7 @@ class BoxLayoutChildMeta: Clutter.ChildMeta {
 	public bool fill { get; set; default = false; }
 }
 
-class BoxLayout: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
+public class BoxLayout: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 	public enum Orientation {
 		HORIZONTAL,
 		VERTICAL

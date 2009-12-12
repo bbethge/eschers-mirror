@@ -9,17 +9,16 @@ public int main(string[] args) {
 		stage_color.alpha = 0xff;
 		stage.color = stage_color;
 		stage.hide.connect((s) => { Clutter.main_quit(); });
-		var layout = new BoxLayout();
-			layout.set_size(300, 200);
-			layout.padding = 10;
-			layout.orientation = BoxLayout.Orientation.HORIZONTAL;
-			var button = new Button();
-				button.text = "hello";
-				layout.pack(button, true, true);
-			var button2 = new Button();
-				button2.text = "goodbye";
-				layout.pack(button2, true, false);
-			stage.add_actor(layout);
+		//var main = new MainMenu(Clutter.Color.from_string("#a0ff90ff"));
+		//var menus = new MenuManager(main);
+		//	stage.add(menus);
+		//	menus.set_size(640, 480);
+		var items = new List<string>();
+		items.append("foo");
+		items.append("bar");
+		var list = 
+			new ListSelector(items, Clutter.Color.from_string("#a0ff90ff"));
+			stage.add(list);
 		stage.show();
 
 	Clutter.main();
