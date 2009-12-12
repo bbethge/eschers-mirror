@@ -23,7 +23,8 @@ public class VideoChooserMenu: BoxLayout {
 		}
 		file_names.sort((CompareFunc)string.collate);
 
-		var chooser = new ListSelector(file_names, color);
+		var chooser = new ListSelector(file_names);
+		chooser.color = color;
 		pack(chooser, false, false);
 		chooser.selected = file_names.data;
 
@@ -37,11 +38,17 @@ public class VideoChooserMenu: BoxLayout {
 		back.text = "Back";
 		back.color = color;
 		hbox.pack(back, false, false);
-		//back.connect('clicked', lambda b: group.move(1,0))
 		back.clicked.connect((b) => {
-			(get_parent() as MenuManager).transition(
-				new MainMenu(this.color), MenuManager.TransitionDirection.LEFT
-			);
+			MenuManager? manager = get_parent() as MenuManager;
+			if (manager != null) {
+				manager.transition(
+					new MainMenu(this.color),
+					MenuManager.TransitionDirection.LEFT
+				);
+			}
+			else {
+				warning("VideoChooserMenu: parent is not MenuManager\n");
+			}
 		});
 
 		hbox.pack(new Frame(), true, true);

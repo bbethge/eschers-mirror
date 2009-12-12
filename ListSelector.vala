@@ -1,35 +1,60 @@
-class ListItem: Clutter.Actor {
+protected class ListItem: Clutter.Actor {
 	public signal void selected();
 
+	// Preferred ratio of padding to label height
 	private const float PADDING_RATIO = 1.0f/4;
 
 	private Clutter.Text label;
 	private bool is_highlighted = false;
 	private bool is_selected = false;
-	private Clutter.Color color;
 
-	public ListItem(string text, Clutter.Color color) {
+	public string text {
+		get { return label.text; }
+		set { label.text = value; }
+	}
+
+	private Clutter.Color _color;
+	public Clutter.Color color {
+		get { return _color; }
+		set {
+			_color = value;
+			update_label_color();
+		}
+	}
+
+	public ListItem() {
 		reactive = true;
 
 		label = new Clutter.Text();
-		label.text = text;
-		label.color = color;
 		label.ellipsize = Pango.EllipsizeMode.END;
 		label.set_parent(this);
+	}
 
-		this.color = color;
+	private void update_label_color() {
+		if (is_selected) {
+			label.color = Clutter.Color.from_string("#000000ff");
+		}
+		else {
+			label.color = color;
+		}
+		queue_redraw();
+	}
 
-		enter_event.connect((event) => {
-			is_highlighted = true;
-			queue_redraw();
-		});
-		leave_event.connect((event) => {
-			is_highlighted = false;
-			queue_redraw();
-		});
-		button_press_event.connect((event) => {
-			select();
-		});
+	public override bool enter_event(Clutter.CrossingEvent event) {
+		is_highlighted = true;
+		update_label_color();
+		return true;
+	}
+
+	public override bool leave_event(Clutter.CrossingEvent event) {
+		is_highlighted = false;
+		update_label_color();
+		return true;
+	}
+
+	public override bool button_press_event(Clutter.ButtonEvent event) {
+		select();
+		return true;
 	}
 
 	public override void map() {
@@ -81,6 +106,7 @@ class ListItem: Clutter.Actor {
 		float label_w, label_h;
 		label.get_preferred_height(box_w, out label_w, out label_h);
 		label_h = float.min(box_h, label_h);
+
 		float padding = PADDING_RATIO * label_h;
 
 		var label_box = Clutter.ActorBox();
@@ -114,38 +140,44 @@ class ListItem: Clutter.Actor {
 		label.paint();
 	}
 
-	public string text {
-		get { return label.text; }
-		set { label.text = value; }
-	}
-
 	public void select() {
 		if (!is_selected) {
-			label.color = Clutter.Color.from_string("#000000ff");
 			is_selected = true;
+			update_label_color();
 			selected();
 		}
 	}
 	
 	public void deselect() {
-		label.color = color;
 		is_selected = false;
+		update_label_color();
 	}
 }
 
 class ListSelector: Clutter.Actor {
 	private List<ListItem> items = new List<ListItem>();
 	private weak ListItem? selected_item = null;
-	private Clutter.Color color;
 
-	public ListSelector(List<string> item_names, Clutter.Color color) {
+	private Clutter.Color _color;
+	public Clutter.Color color {
+		get { return _color; }
+		set {
+			_color = value;
+			foreach (var item in items) {
+				item.color = _color;
+			}
+		}
+	}
+
+	public ListSelector(List<string> item_names) {
 		foreach (var name in item_names) {
-			var new_item = new ListItem(name, color);
+			var new_item = new ListItem();
+			new_item.text = name;
+			new_item.color = color;
 			new_item.selected.connect(on_item_selected);
 			items.append(new_item);
 			new_item.set_parent(this);
 		}
-		this.color = color;
 	}
 
 	public override void map() {

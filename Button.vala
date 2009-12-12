@@ -3,21 +3,27 @@ class Button: Clutter.Actor {
 
 	public signal void clicked();
 
+	// preferred ratio of padding to label height
+	private class const float PADDING_RATIO = 1.0f/4;
 
-	/**
-	 * preferred ratio of padding to label height
-	 */
-	static float padding_ratio = 1.0f/4;
-
+	// whether the button is highlighted because the pointer is hovering over it
 	private bool highlighted = false;
+
 	private Clutter.Text label = new Clutter.Text();
 
+	/**
+	 * The text displayed on the button
+	 */
 	public string text {
 		get { return label.text; }
 		set { label.text = value; }
 	}
 
 	private Clutter.Color _color;
+	/**
+	 * The text (and highlight) color of the button, which should contrast with
+	 * black
+	 */
 	public Clutter.Color color {
 		get { return _color; }
 		set {
@@ -61,7 +67,7 @@ class Button: Clutter.Actor {
 			);
 			min_width += label_min_width;
 			natural_width += 
-				label_natural_width + 2*padding_ratio*label_natural_height;
+				label_natural_width + 2*PADDING_RATIO*label_natural_height;
 		}
 	}
 
@@ -77,7 +83,7 @@ class Button: Clutter.Actor {
 			);
 			min_height = float.max(min_height, label_min_height);
 			natural_height = float.max(
-				natural_height, label_natural_height*(1+2*padding_ratio));
+				natural_height, label_natural_height*(1+2*PADDING_RATIO));
 		}
 	}
 
@@ -112,6 +118,7 @@ class Button: Clutter.Actor {
 		else {
 			label.color = color;
 		}
+		queue_redraw();
 	}
 
 	public override bool enter_event(Clutter.CrossingEvent event) {
@@ -132,12 +139,13 @@ class Button: Clutter.Actor {
 	}
 
 	public override void paint() {
+		// Find out our size
 		Clutter.ActorBox box;
 		get_allocation_box(out box);
-
 		float width, height;
 		box.get_size(out width, out height);
 
+		// Draw a rounded rectangle for the background
 		if (highlighted) {
 			Cogl.set_source_color4ub(
 				color.red, color.green, color.blue,

@@ -20,10 +20,16 @@ class MainMenu: BoxLayout {
 		start.color = color;
 		vbox.add(start);
 		start.clicked.connect((b) => {
-			(get_parent() as MenuManager).transition(
-				new VideoChooserMenu(this.color),
-				MenuManager.TransitionDirection.RIGHT
-			);
+			MenuManager? manager = get_parent() as MenuManager;
+			if (manager != null) {
+				manager.transition(
+					new VideoChooserMenu(this.color),
+					MenuManager.TransitionDirection.RIGHT
+				);
+			}
+			else {
+				warning("MainMenu: parent is not MenuManager\n");
+			}
 		});
 
 		var quit = new Button();
