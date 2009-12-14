@@ -103,12 +103,15 @@ protected class ListItem: Clutter.Actor {
 		float box_w, box_h;
 		box.get_size(out box_w, out box_h);
 
-		float label_w, label_h;
-		label.get_preferred_height(box_w, out label_w, out label_h);
+		float unused, label_h;
+		label.get_preferred_height(box_w, out unused, out label_h);
 		label_h = float.min(box_h, label_h);
 
 		float padding = PADDING_RATIO * label_h;
 
+		// The height given to the label is its requested height or our
+		// allocated height, whichever is smaller; the width is our allocated
+		// width minus padding.
 		var label_box = Clutter.ActorBox();
 		label_box.x1 = padding;
 		label_box.y1 = box_h/2 - label_h/2;
@@ -123,6 +126,8 @@ protected class ListItem: Clutter.Actor {
 		float width, height;
 		box.get_size(out width, out height);
 
+		// If highlighted, draw a stroked round rectangle; if selected, draw a
+		// filled round rectangle.
 		if (is_highlighted || is_selected) {
 			Cogl.set_source_color4ub(
 				color.red, color.green, color.blue,

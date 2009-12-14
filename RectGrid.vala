@@ -50,13 +50,19 @@ protected class RectTile: Clutter.Rectangle {
 
 protected class TileInfo: Object {
 	public Tile tile;
+	public TileShadow shadow;
 	public uint col;
 	public uint row;
 	public uint src_col;
 	public uint src_row;
+	public bool is_flying = false;
 
-	public TileInfo(Tile tile, uint col, uint row, uint src_col, uint src_row) {
+	public TileInfo(
+		Tile tile, TileShadow shadow,
+		uint col, uint row, uint src_col, uint src_row
+	) {
 		this.tile = tile;
+		this.shadow = shadow;
 		this.col = col;
 		this.row = row;
 		this.src_col = src_col;
@@ -72,7 +78,9 @@ public class RectGrid: Grid {
 	private Tile? grabbed_tile = null;
 	private float grab_offset_x;
 	private float grab_offset_y;
-	private TileShadow shadow;
+
+	protected class const float MAX_TILE_ALTITUDE = 15;
+	protected class const uint TILE_SNAP_TIME = 2000;
 
 	public RectGrid(string videoFile, uint rows, uint cols) {
 		base(videoFile);
@@ -96,20 +104,19 @@ public class RectGrid: Grid {
 				mat.translate(col, row, 0);
 
 				var tile = new Tile(shape, mat, clutter_texture);
-				var tile_info = new TileInfo(tile, col, row, col, row);
+				var shadow = new TileShadow(shape);
+				var tile_info = new TileInfo(tile, shadow, col, row, col, row);
 				set_tile_info(tile, tile_info);
 
 				tiles.prepend(tile);
 				tile.set_parent(this);
 				tile.button_press_event.connect(on_tile_button_press);
+
+				shadow.opacity = 0x80;
+				shadow.set_parent(this);
 			}
 		}
 		shuffle();
-
-		shadow = new TileShadow(shape);
-		shadow.set_parent(this);
-		shadow.altitude = 15;
-		shadow.opacity = 0x80;
 
 		reactive = true;
 		motion_event.connect(on_mouse_motion);
@@ -123,7 +130,7 @@ public class RectGrid: Grid {
 		tile.set_data_full("rect-grid-tile-info", info, Object.unref);
 	}
 
-	protected static TileInfo? get_tile_info(Tile tile) {
+	protected static TileInfo get_tile_info(Tile tile) {
 		var info = tile.get_data("rect-grid-tile-info") as TileInfo;
 		assert(info != null);
 		return info;
@@ -133,16 +140,18 @@ public class RectGrid: Grid {
 		base.map();
 		foreach (var tile in tiles) {
 			tile.map();
+			var tile_info = get_tile_info(tile);
+			tile_info.shadow.map();
 		}
-		shadow.map();
 	}
 
 	public override void unmap() {
 		base.unmap();
 		foreach (var tile in tiles) {
 			tile.unmap();
+			var tile_info = get_tile_info(tile);
+			tile_info.shadow.unmap();
 		}
-		shadow.unmap();
 	}
 
 	public override void allocate(
@@ -168,30 +177,32 @@ public class RectGrid: Grid {
 			tile_box.y2 = tile_box.y1 + h/rows;
 
 			tile.allocate(tile_box, flags);
-		}
 
-		var shadow_box = Clutter.ActorBox();
-		if (grabbed_tile != null) {
-			shadow_box.x1 = grabbed_tile.x;
-			shadow_box.y1 = grabbed_tile.y;
+			var tile_info = get_tile_info(tile);
+			tile_info.shadow.allocate(tile_box, flags);
 		}
-		else {
-			shadow_box.x1 = 0;
-			shadow_box.y1 = 0;
-		}
-		shadow_box.x2 = shadow_box.x1 + w/cols;
-		shadow_box.y2 = shadow_box.y1 + h/rows;
-		shadow.allocate(shadow_box, flags);
 	}
 
 	public override void paint() {
 		foreach (var tile in tiles) {
-			if (tile != grabbed_tile) {
+			var tile_info = get_tile_info(tile);
+			if (tile != grabbed_tile && !tile_info.is_flying) {
+				tile.paint();
+			}
+		}
+		foreach (var tile in tiles) {
+			var tile_info = get_tile_info(tile);
+			if (tile_info.is_flying) {
+				tile_info.shadow.paint();
+			}
+		}
+		foreach (var tile in tiles) {
+			var tile_info = get_tile_info(tile);
+			if (tile != grabbed_tile && tile_info.is_flying) {
 				tile.paint();
 			}
 		}
 		if (grabbed_tile != null) {
-			shadow.paint();
 			grabbed_tile.paint();
 		}
 	}
@@ -199,7 +210,16 @@ public class RectGrid: Grid {
 	public override void pick(Clutter.Color color) {
 		base.pick(color);
 		foreach (var tile in tiles) {
-			tile.paint();
+			var tile_info = get_tile_info(tile);
+			if (!tile_info.is_flying) {
+				tile.paint();
+			}
+		}
+		foreach (var tile in tiles) {
+			var tile_info = get_tile_info(tile);
+			if (tile_info.is_flying) {
+				tile.paint();
+			}
 		}
 	}
 
@@ -208,6 +228,7 @@ public class RectGrid: Grid {
 	) {
 		if (actor is Tile) {
 			grabbed_tile = (Tile) actor;
+
 			float mouse_x = event.x, mouse_y = event.y;
 			// FIXME: bindings for transform_stage_point are broken
 			//transform_stage_point(event.x, event.y, mouse_x, mouse_y);
@@ -215,7 +236,19 @@ public class RectGrid: Grid {
 			grabbed_tile.get_position(out child_x, out child_y);
 			grab_offset_x = child_x - mouse_x;
 			grab_offset_y = child_y - mouse_y;
-			grabbed_tile.opacity = 0x80;
+
+			// Allow the player to grab a flying tile
+			var animation = grabbed_tile.get_animation();
+			if (animation != null) {
+				animation.completed();
+			}
+
+			var tile_info = get_tile_info(grabbed_tile);
+			tile_info.is_flying = true;
+			tile_info.shadow.animate(
+				Clutter.AnimationMode.EASE_OUT_CUBIC, 500, 
+				"altitude", MAX_TILE_ALTITUDE, null
+			);
 			return true;
 		}
 		return false;
@@ -234,6 +267,8 @@ public class RectGrid: Grid {
 		return false;
 	}
 
+	private delegate void CompletedHandler(Clutter.Animation a);
+
 	protected bool on_button_release(Clutter.ButtonEvent event) {
 		if (grabbed_tile != null) {
 			grabbed_tile.hide();
@@ -247,6 +282,10 @@ public class RectGrid: Grid {
 			grabbed_tile.show();
 
 			TileInfo grabbed_tile_info = get_tile_info(grabbed_tile);
+			Clutter.ActorBox box;
+			get_allocation_box(out box);
+			float w, h;
+			box.get_size(out w, out h);
 
 			if (tiles.index(drop_target as Tile) != -1) {
 				TileInfo target_tile_info = get_tile_info((Tile)drop_target);
@@ -259,28 +298,59 @@ public class RectGrid: Grid {
 				target_tile_info.col = grabbed_col;
 				target_tile_info.row = grabbed_row;
 
+				target_tile_info.is_flying = true;
+
 				// Make drop target move to its new position
-				drop_target.animate(
-					Clutter.AnimationMode.EASE_OUT_CUBIC, 500,
-					"x", target_tile_info.col*width/cols,
-					"y", target_tile_info.row*height/rows,
+				var animation = drop_target.animate(
+					Clutter.AnimationMode.EASE_IN_OUT_CUBIC, TILE_SNAP_TIME,
+					"x", target_tile_info.col*w/cols,
+					"y", target_tile_info.row*h/rows,
 					null
+				);
+				animation.completed.connect((a) => {
+					target_tile_info.is_flying = false;
+				});
+				var shadow_animation = target_tile_info.shadow.animate(
+					Clutter.AnimationMode.EASE_IN_CUBIC, TILE_SNAP_TIME/2,
+					"altitude", MAX_TILE_ALTITUDE, null
+				);
+				Signal.connect_after(
+					shadow_animation, "completed",
+					(Callback)on_target_tile_shadow_animation_completed,
+					target_tile_info.shadow
 				);
 			}
 
 			// Make grabbed tile move to its (new) position
-			grabbed_tile.animate(
-				Clutter.AnimationMode.EASE_OUT_CUBIC, 500,
-				"x", grabbed_tile_info.col*width/cols,
-				"y", grabbed_tile_info.row*height/rows
+			var animation = grabbed_tile.animate(
+				Clutter.AnimationMode.EASE_OUT_CUBIC, TILE_SNAP_TIME,
+				"x", grabbed_tile_info.col*w/cols,
+				"y", grabbed_tile_info.row*h/rows,
+				null
 			);
-			grabbed_tile.opacity = 0xff;
+			grabbed_tile_info.shadow.animate(
+				Clutter.AnimationMode.EASE_OUT_CUBIC, TILE_SNAP_TIME,
+				"altitude", 0.0f, null
+			);
+			animation.completed.connect((a) => {
+				grabbed_tile_info.is_flying = false;
+			});
 			grabbed_tile = null;
 
 			queue_relayout();
 			return true;
 		}
 		return false;
+	}
+
+	private static void on_target_tile_shadow_animation_completed(
+		Clutter.Animation a, TileShadow shadow
+	) {
+		shadow.animate(
+			Clutter.AnimationMode.EASE_OUT_CUBIC,
+			TILE_SNAP_TIME - TILE_SNAP_TIME/2,
+			"altitude", 0.0f, null
+		);
 	}
 
 	public override bool is_solved() {

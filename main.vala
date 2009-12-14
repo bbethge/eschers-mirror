@@ -1,5 +1,5 @@
 public int main(string[] args) {
-	Clutter.init(ref args);
+	ClutterGst.init(ref args);
 
 	var stage = new Clutter.Stage();
 		var stage_color = Clutter.Color.from_string("#808080ff");
@@ -12,6 +12,8 @@ public int main(string[] args) {
 		stage.show();
 
 	Clutter.main();
+
+	write_config();
 
 	return 0;
 }

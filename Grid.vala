@@ -209,7 +209,13 @@ public class TileShadow: Clutter.Actor {
 			verts[i,1] = shape_verts[i].y*h;
 			tex_coords[i] = 0.75f;
 
-			float angle = Math.acosf(off1.dot(off2)/(a*a)) / CORNER_SLICES;
+			float angle;
+			if (a != 0) {
+				angle = Math.acosf(off1.dot(off2)/(a*a)) / CORNER_SLICES;
+			}
+			else {
+				angle = 0;
+			}
 
 			for (uint k = 0; k < CORNER_SLICES; ++k) {
 				Vec2 off;

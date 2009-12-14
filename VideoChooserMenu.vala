@@ -1,14 +1,37 @@
 public class VideoChooserMenu: BoxLayout {
 	private Clutter.Color color;
+	private ListSelector chooser;
 
 	public VideoChooserMenu(Clutter.Color color) {
 		orientation = BoxLayout.Orientation.VERTICAL;
 		this.color = color;
 
 		var file_names = new List<string>();
+
+		// Figure out where videos are stored
+		string video_dir_name;
+		unowned KeyFile config = get_config();
 		try {
-			// FIXME: hard-coded path
-			var video_dir = Dir.open("/home/ben/Music Videos");
+			video_dir_name = config.get_string("default", "video_dir");
+		}
+		catch (KeyFileError err) {
+			video_dir_name = 
+				Environment.get_user_special_dir(UserDirectory.VIDEOS);
+			config.set_string("default", "video_dir", video_dir_name);
+			try {
+				config.set_comment(
+					"default", "video_dir",
+					"Directory where music videos are stored"
+				);
+			}
+			catch (KeyFileError err2) {
+				// Ignore -- it's just a comment
+			}
+		}
+
+		// Read the filenames from the video directory
+		try {
+			var video_dir = Dir.open(video_dir_name);
 			while (true) {
 				weak string name = video_dir.read_name();
 				if (name == null) break;
@@ -16,17 +39,22 @@ public class VideoChooserMenu: BoxLayout {
 			}
 		}
 		catch (FileError err) {
-			warning("Couldn't open video directory: %s\n", err.message);
+			warning(
+				"Couldn't open video directory %s: %s\n",
+				video_dir_name, err.message
+			);
 		}
 		if (file_names.length() == 0) {
-			warning("Couldn't find any videos\n");
+			warning("Couldn't find any videos in %s\n", video_dir_name);
 		}
+
+		// Sort the video filenames
 		file_names.sort((CompareFunc)string.collate);
 
-		var chooser = new ListSelector(file_names);
+		chooser = new ListSelector(file_names);
 		chooser.color = color;
 		pack(chooser, false, false);
-		chooser.selected = file_names.data;
+		//chooser.selected = file_names.data;
 
 		pack(new Frame(), true, true);
 		
@@ -57,7 +85,29 @@ public class VideoChooserMenu: BoxLayout {
 		go.text = "Go";
 		go.color = color;
 		hbox.pack(go, false, false);
-		//go.connect('clicked', self.on_go_clicked)
+		go.clicked.connect(on_go_clicked);
+	}
+
+	private void on_go_clicked(Button go) {
+		string filename = Path.build_filename(
+			"/home/ben/Music Videos", chooser.selected, null
+		);
+		var grid = new RectGrid(filename, 3, 4);
+		MenuManager? manager = get_parent() as MenuManager;
+		if (manager != null) {
+			var timeline = manager.transition(
+				grid, MenuManager.TransitionDirection.RIGHT
+			);
+			timeline.completed.connect((t) => {
+				grid.start();
+			});
+		}
+		else {
+			warning(
+				"VideoChooserMenu: parent is %s, not MenuManager\n",
+				get_parent().get_type().name()
+			);
+		}
 	}
 
 	//def start_video(self, timeline):
