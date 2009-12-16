@@ -5,7 +5,10 @@ namespace Cogl {
 		Cogl.PixelFormat format, Cogl.PixelFormat internal_format,
 		uint rowstride, [CCode (array_length = false)] uchar[] data
 	);
-	public void set_draw_buffer(Cogl.BufferTarget target, Cogl.Offscreen? offscreen);
+}
+
+namespace Clutter {
+	public Clutter.Vertex vertex_new(float x, float y, float z);
 }
 
 namespace Errata {

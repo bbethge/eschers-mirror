@@ -1,3 +1,10 @@
+/**
+ * Compute actual mathematical modulo operation
+ */
+double modulo(double x, double y) {
+	return x - Math.floor(x/y)*y;
+}
+
 /*
 protected class RectTile: Clutter.Rectangle {
 	public uint src_col;
@@ -51,42 +58,43 @@ protected class RectTile: Clutter.Rectangle {
 protected class TileInfo: Object {
 	public Tile tile;
 	public TileShadow shadow;
-	public uint col;
-	public uint row;
-	public uint src_col;
-	public uint src_row;
+	public uint col = 0;
+	public uint row = 0;
+	public uint src_col = 0;
+	public uint src_row = 0;
+	public uint rotation_step = 0;
+	public Clutter.BehaviourRotate? rotation_behaviour = null;
+	public bool flipped = false;
 	public bool is_flying = false;
 
-	public TileInfo(
-		Tile tile, TileShadow shadow,
-		uint col, uint row, uint src_col, uint src_row
-	) {
+	public TileInfo(Tile tile, TileShadow shadow) {
 		this.tile = tile;
 		this.shadow = shadow;
-		this.col = col;
-		this.row = row;
-		this.src_col = src_col;
-		this.src_row = src_row;
 	}
 }
 
 public class RectGrid: Grid {
 	private uint rows;
 	private uint cols;
+	private bool rotation_allowed;
 
-	private SList<Tile> tiles;
+	private SList<Tile> tiles = new SList<Tile>();
 	private Tile? grabbed_tile = null;
+	private Clutter.BehaviourRotate? grabbed_tile_rotate_behaviour;
 	private float grab_offset_x;
 	private float grab_offset_y;
 
 	protected class const float MAX_TILE_ALTITUDE = 15;
-	protected class const uint TILE_SNAP_TIME = 2000;
+	protected class const uint TILE_SNAP_TIME = 500;
 
-	public RectGrid(string videoFile, uint rows, uint cols) {
+	public RectGrid(
+		string videoFile, uint rows, uint cols, bool rotation_allowed
+	) {
 		base(videoFile);
 
 		this.cols = cols;
 		this.rows = rows;
+		this.rotation_allowed = rotation_allowed;
 
 		TileVertex[] verts = new TileVertex[4];
 		verts[0].x = 0; verts[0].y = 0;
@@ -105,7 +113,11 @@ public class RectGrid: Grid {
 
 				var tile = new Tile(shape, mat, clutter_texture);
 				var shadow = new TileShadow(shape);
-				var tile_info = new TileInfo(tile, shadow, col, row, col, row);
+				var tile_info = new TileInfo(tile, shadow);
+				tile_info.col = col;
+				tile_info.row = row;
+				tile_info.src_col = col;
+				tile_info.src_row = row;
 				set_tile_info(tile, tile_info);
 
 				tiles.prepend(tile);
@@ -119,13 +131,12 @@ public class RectGrid: Grid {
 		shuffle();
 
 		reactive = true;
-		motion_event.connect(on_mouse_motion);
-		button_release_event.connect(on_button_release);
+		//motion_event.connect(on_mouse_motion);
+		//button_release_event.connect(on_button_release);
 	}
 
 	protected static void set_tile_info(Tile tile, TileInfo info) {
-		// Vala doesn't ref info when we pass it as a pointer, so we ref it
-		// explicitly
+		// We have to explicitly create a ref for the tile to hold
 		info.@ref();
 		tile.set_data_full("rect-grid-tile-info", info, Object.unref);
 	}
@@ -227,34 +238,86 @@ public class RectGrid: Grid {
 		Clutter.Actor actor, Clutter.ButtonEvent event
 	) {
 		if (actor is Tile) {
-			grabbed_tile = (Tile) actor;
 
-			float mouse_x = event.x, mouse_y = event.y;
-			// FIXME: bindings for transform_stage_point are broken
-			//transform_stage_point(event.x, event.y, mouse_x, mouse_y);
-			float child_x, child_y;
-			grabbed_tile.get_position(out child_x, out child_y);
-			grab_offset_x = child_x - mouse_x;
-			grab_offset_y = child_y - mouse_y;
+			switch (event.button) {
+			case 1:
+				grabbed_tile = (Tile) actor;
+				float mouse_x = event.x, mouse_y = event.y;
+				// FIXME: bindings for transform_stage_point are broken
+				//transform_stage_point(event.x, event.y, mouse_x, mouse_y);
+				float child_x, child_y;
+				grabbed_tile.get_position(out child_x, out child_y);
+				grab_offset_x = child_x - mouse_x;
+				grab_offset_y = child_y - mouse_y;
 
-			// Allow the player to grab a flying tile
-			var animation = grabbed_tile.get_animation();
-			if (animation != null) {
-				animation.completed();
+				// Allow the player to grab a flying tile
+				var animation = grabbed_tile.get_animation();
+				if (animation != null) {
+					animation.completed();
+				}
+
+				var tile_info = get_tile_info(grabbed_tile);
+				tile_info.is_flying = true;
+				tile_info.shadow.animate(
+					Clutter.AnimationMode.EASE_OUT_CUBIC, 250, 
+					"altitude", MAX_TILE_ALTITUDE, null
+				);
+				return true;
+				break;
+
+			case 3:
+				if (rotation_allowed) {
+					if (
+						(event.modifier_state & Clutter.ModifierType.SHIFT_MASK)
+						!= 0
+					) {
+						rotate_tile((Tile)actor, -1);
+					}
+					else {
+						rotate_tile((Tile)actor, 1);
+					}
+				}
+				return true;
+				break;
 			}
-
-			var tile_info = get_tile_info(grabbed_tile);
-			tile_info.is_flying = true;
-			tile_info.shadow.animate(
-				Clutter.AnimationMode.EASE_OUT_CUBIC, 500, 
-				"altitude", MAX_TILE_ALTITUDE, null
-			);
-			return true;
 		}
 		return false;
 	}
 
-	protected bool on_mouse_motion(Clutter.MotionEvent event) {
+	protected void rotate_tile(Tile tile, int amount) {
+		var tile_info = get_tile_info(tile);
+		var old_rotation_step = tile_info.rotation_step;
+		tile_info.rotation_step = (2+tile_info.rotation_step-amount) % 2;
+		var timeline = new Clutter.Timeline(500);
+		var alpha = new Clutter.Alpha.full(
+			timeline, Clutter.AnimationMode.EASE_IN_OUT_QUAD
+		);
+		tile_info.rotation_behaviour = new Clutter.BehaviourRotate(
+			alpha, Clutter.RotateAxis.Z_AXIS,
+			amount > 0
+				? Clutter.RotateDirection.CW
+				: Clutter.RotateDirection.CCW,
+			old_rotation_step * 180.0, tile_info.rotation_step * 180.0
+		);
+		tile_info.rotation_behaviour.set_center(
+			(int)tile.width/2, (int)tile.height/2, 0
+		);
+		tile_info.rotation_behaviour.apply(tile);
+		tile_info.rotation_behaviour.apply(tile_info.shadow);
+		Signal.connect_after(
+			timeline, "completed", (Callback)on_tile_rotation_completed,
+			tile_info
+		);
+		timeline.start();
+	}
+
+	private static void on_tile_rotation_completed(
+		Clutter.Timeline timeline, TileInfo tile_info
+	) {
+		tile_info.rotation_behaviour = null;
+	}
+
+	protected override bool motion_event(Clutter.MotionEvent event) {
 		if (grabbed_tile != null) {
 			float mouse_x = event.x, mouse_y = event.y;
 			// FIXME: bindings for transform_stage_point are broken
@@ -267,10 +330,8 @@ public class RectGrid: Grid {
 		return false;
 	}
 
-	private delegate void CompletedHandler(Clutter.Animation a);
-
-	protected bool on_button_release(Clutter.ButtonEvent event) {
-		if (grabbed_tile != null) {
+	protected override bool button_release_event(Clutter.ButtonEvent event) {
+		if (grabbed_tile != null && event.button == 1) {
 			grabbed_tile.hide();
 			var stage = get_stage() as Clutter.Stage;
 			if (stage == null) {
@@ -353,12 +414,27 @@ public class RectGrid: Grid {
 		);
 	}
 
+	private bool on_tile_key_press(Clutter.KeyEvent event) {
+		stdout.printf("key\n");
+		if (grabbed_tile != null) {
+			if (event.unicode_value == 'r') {
+				rotate_tile(grabbed_tile, 1);
+			}
+			else if (event.unicode_value == 'R') {
+				rotate_tile(grabbed_tile, -1);
+			}
+			return true;
+		}
+		return false;
+	}
+
 	public override bool is_solved() {
 		foreach (var tile in tiles) {
 			var tile_info = get_tile_info(tile);
 			if (
 				tile_info.col != tile_info.src_col
 				|| tile_info.row != tile_info.src_row
+				|| tile_info.rotation_step != 0
 			) {
 				return false;
 			}
@@ -386,6 +462,14 @@ public class RectGrid: Grid {
 			tile_info.row = other_tile_info.row;
 			other_tile_info.col = col;
 			other_tile_info.row = row;
+		}
+		if (rotation_allowed) {
+			foreach (var tile in tiles) {
+				var tile_info = get_tile_info(tile);
+				tile_info.rotation_step = Random.int_range(0, 2);
+				tile.rotation_angle_z = tile_info.rotation_step * 180.0;
+				tile.rotation_center_z_gravity = Clutter.Gravity.CENTER;
+			}
 		}
 	}
 }
