@@ -1,16 +1,17 @@
 VALA_SOURCES = \
 	main.vala \
-	ListSelector.vala \
-	MainMenu.vala \
-	VideoChooserMenu.vala \
-	Frame.vala \
+	Config.vala \
 	BoxLayout.vala \
-	MenuManager.vala \
+	Frame.vala \
 	Button.vala \
+	ListSelector.vala \
+	MenuManager.vala \
+	MainMenu.vala \
+	OptionsMenu.vala \
+	VideoChooserMenu.vala \
 	Grid.vala \
 	RectGrid.vala \
-	Vector.vala \
-	Config.vala
+	Vector.vala
 
 C_SOURCES = Errata.c
 

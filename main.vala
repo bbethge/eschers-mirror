@@ -13,7 +13,7 @@ public int main(string[] args) {
 
 	Clutter.main();
 
-	write_config();
+	Config.get_config().write();
 
 	return 0;
 }

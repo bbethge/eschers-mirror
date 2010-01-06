@@ -32,6 +32,21 @@ class MainMenu: BoxLayout {
 			}
 		});
 
+		var options = new Button();
+		options.text = "Options";
+		options.color = color;
+		vbox.add(options);
+		options.clicked.connect((b) => {
+			MenuManager? manager = get_parent() as MenuManager;
+			if (manager != null) {
+				var menu = new OptionsMenu(this.color);
+				manager.transition(menu, MenuManager.TransitionDirection.LEFT);
+			}
+			else {
+				warning("MainMenu: parent is not MenuManager\n");
+			}
+		});
+
 		var quit = new Button();
 		quit.text = "Quit";
 		quit.color = color;

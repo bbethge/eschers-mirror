@@ -8,26 +8,8 @@ public class VideoChooserMenu: BoxLayout {
 
 		var file_names = new List<string>();
 
-		// Figure out where videos are stored
-		string video_dir_name;
-		unowned KeyFile config = get_config();
-		try {
-			video_dir_name = config.get_string("default", "video_dir");
-		}
-		catch (KeyFileError err) {
-			video_dir_name = 
-				Environment.get_user_special_dir(UserDirectory.VIDEOS);
-			config.set_string("default", "video_dir", video_dir_name);
-			try {
-				config.set_comment(
-					"default", "video_dir",
-					"Directory where music videos are stored"
-				);
-			}
-			catch (KeyFileError err2) {
-				// Ignore -- it's just a comment
-			}
-		}
+		var config = Config.get_config();
+		var video_dir_name = config.video_dir;
 
 		// Read the filenames from the video directory
 		try {
