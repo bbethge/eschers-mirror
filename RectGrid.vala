@@ -131,8 +131,6 @@ public class RectGrid: Grid {
 		shuffle();
 
 		reactive = true;
-		//motion_event.connect(on_mouse_motion);
-		//button_release_event.connect(on_button_release);
 	}
 
 	protected static void set_tile_info(Tile tile, TileInfo info) {

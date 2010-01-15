@@ -74,11 +74,15 @@ public class VideoChooserMenu: BoxLayout {
 		string filename = Path.build_filename(
 			"/home/ben/Music Videos", chooser.selected, null
 		);
+		var frame = new Frame();
+		frame.expand_child = true;
+		frame.preserve_aspect = true;
 		var grid = new RectGrid(filename, 3, 4, true);
+		frame.add(grid);
 		MenuManager? manager = get_parent() as MenuManager;
 		if (manager != null) {
 			var timeline = manager.transition(
-				grid, MenuManager.TransitionDirection.RIGHT
+				frame, MenuManager.TransitionDirection.RIGHT
 			);
 			timeline.completed.connect((t) => {
 				grid.start();

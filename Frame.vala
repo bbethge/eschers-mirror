@@ -14,6 +14,13 @@ class Frame: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 		default = false;
 	}
 
+	private bool _preserve_aspect;
+	public bool preserve_aspect {
+		get { return _preserve_aspect; }
+		set { _preserve_aspect = value; queue_relayout(); }
+		default = false;
+	}
+
 	private float _padding;
 	public float padding {
 		get { return _padding; }
@@ -99,18 +106,29 @@ class Frame: Clutter.Actor, Clutter.Container, Clutter.Scriptable {
 		if (child != null && child.visible) {
 			float w, h;
 			box.get_size(out w, out h);
+
+			float child_pref_w, child_pref_h;
+			child.get_preferred_size(
+				null, null, out child_pref_w, out child_pref_h
+			);
+
 			float child_w, child_h;
 			if (expand_child) {
 				child_w = w - 2*padding;
 				child_h = h - 2*padding;
 			}
 			else {
-				float child_pref_w, child_pref_h;
-				child.get_preferred_size(
-					null, null, out child_pref_w, out child_pref_h
-				);
 				child_w = float.min(child_pref_w, w);
 				child_h = float.min(child_pref_h, h);
+			}
+
+			if (preserve_aspect) {
+				if (child_w/child_h > child_pref_w/child_pref_h) {
+					child_w = child_pref_w*child_h/child_pref_h;
+				}
+				else {
+					child_h = child_pref_h*child_w/child_pref_w;
+				}
 			}
 
 			// Center the child's allocation box in ours
