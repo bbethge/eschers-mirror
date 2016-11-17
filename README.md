@@ -3,7 +3,7 @@ VidGrid.  (The name may change if I come up with something that sucks less.)
 
 System Requirements
 ===================
- * The Vala compiler, version > 0.7.8 (<http://www.vala-project.org/>)
+ * The Vala compiler, version > 0.7.8 (<http://www.vala-project.org/>).
    At the time of this writing, 0.7.8 is the most recent release, so you will
    need the development version.
  * Clutter 1.0, including development files (<http://www.clutter-project.org/>)
@@ -18,7 +18,9 @@ Compiling
 =========
 autotools still hurts my brain, so compilation uses a plain `Makefile`.  Just
 run
+
     $ make
+
 and hope for the best.
 
 Running
@@ -26,6 +28,7 @@ Running
 Escher's Mirror is basically a jigsaw puzzle made from a video.  Since this is a
 very early release, you will need to supply your own video (music videos are
 recommended).
+
     $ ./eschers-mirror
 
 Controls
