@@ -51,6 +51,6 @@ look for videos.
 Credits
 =======
 Files in the `clutter-gst-0.10` directory I borrowed from the Clutter git repo.
-`data/background.jpg` (which is not currently used) is by Jurvetson from
-flickr. Unlike everything else, it is under a Creative Commons Attribution
-license.
+`data/background.jpg` (which is not currently used) is by [Steve Jurvetson]
+(https://www.flickr.com/photos/jurvetson) from flickr. Unlike everything else,
+it is under a Creative Commons Attribution license.
