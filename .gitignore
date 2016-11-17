@@ -1,6 +1,4 @@
-*.pyc
-/build/
 *.gi
 *.o
 *.c
-!/VideoDecode.c
+!/Errata.c
